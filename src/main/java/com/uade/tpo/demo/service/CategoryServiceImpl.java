@@ -30,10 +30,10 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional(rollbackFor = Throwable.class)
     public Category createCategory(String description) throws CategoryDuplicateException {
         List<Category> categories = categoryRepository.findByDescription(description);
-        if (categories.isEmpty()) {
-            categoryRepository.save(new Category(description));
+        if (!categories.isEmpty()) {
+            throw new CategoryDuplicateException();
         }
 
-        throw new CategoryDuplicateException();
+        return categoryRepository.save(new Category(description));
     }
 }
