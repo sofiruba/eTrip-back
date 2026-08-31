@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.controllers.experiences;
 
+import java.net.URI;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.service.ExperienceSessionService;
 
@@ -30,47 +33,55 @@ public class ExperienceSessionsController {
     @GetMapping
     public ResponseEntity<Page<ExperienceSessionResponseDTO>> getSessions(
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Armar PageRequest con defaults cuando page o size sean null.
-        // 2. Llamar a experienceSessionService.getSessions(pageRequest).
-        // 3. Retornar ResponseEntity.ok(resultado).
-        return null;
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Long experienceId) throws ResourceNotFoundException {
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
+
+        if (experienceId != null) {
+            return ResponseEntity.ok(experienceSessionService.getSessionsByExperience(experienceId, pageRequest));
+        }
+
+        return ResponseEntity.ok(experienceSessionService.getSessions(pageRequest));
+    }
+
+    @GetMapping("/experience/{experienceId}")
+    public ResponseEntity<Page<ExperienceSessionResponseDTO>> getSessionsByExperience(
+            @PathVariable Long experienceId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) throws ResourceNotFoundException {
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
+
+        return ResponseEntity.ok(experienceSessionService.getSessionsByExperience(experienceId, pageRequest));
     }
 
     @GetMapping("/{sessionId}")
     public ResponseEntity<ExperienceSessionResponseDTO> getSessionById(@PathVariable Long sessionId)
             throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Llamar a experienceSessionService.getSessionById(sessionId).
-        // 2. Retornar ResponseEntity.ok(dto).
-        return null;
+        return ResponseEntity.ok(experienceSessionService.getSessionById(sessionId));
     }
 
     @PostMapping
     public ResponseEntity<ExperienceSessionResponseDTO> createSession(
-            @RequestBody ExperienceSessionRequestDTO request) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Delegar en experienceSessionService.createSession(request).
-        // 2. Retornar ResponseEntity.created(URI.create("/experience-sessions/" + result.getId())).body(result).
-        return null;
+            @RequestBody ExperienceSessionRequestDTO request) throws ResourceNotFoundException, BadRequestException {
+        ExperienceSessionResponseDTO result = experienceSessionService.createSession(request);
+        return ResponseEntity.created(URI.create("/experience-sessions/" + result.getId())).body(result);
     }
 
     @PutMapping("/{sessionId}")
     public ResponseEntity<ExperienceSessionResponseDTO> updateSession(
             @PathVariable Long sessionId,
-            @RequestBody ExperienceSessionRequestDTO request) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Delegar en experienceSessionService.updateSession(sessionId, request).
-        // 2. Retornar ResponseEntity.ok(dto).
-        return null;
+            @RequestBody ExperienceSessionRequestDTO request) throws ResourceNotFoundException, BadRequestException {
+        return ResponseEntity.ok(experienceSessionService.updateSession(sessionId, request));
     }
 
     @DeleteMapping("/{sessionId}")
-    public ResponseEntity<Void> deleteSession(@PathVariable Long sessionId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Delegar en experienceSessionService.deleteSession(sessionId).
-        // 2. Retornar ResponseEntity.noContent().build().
-        return null;
+    public ResponseEntity<Void> deleteSession(@PathVariable Long sessionId)
+            throws ResourceNotFoundException, BadRequestException {
+        experienceSessionService.deleteSession(sessionId);
+        return ResponseEntity.noContent().build();
     }
 }

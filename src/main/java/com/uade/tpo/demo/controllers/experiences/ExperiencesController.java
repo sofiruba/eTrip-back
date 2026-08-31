@@ -39,10 +39,14 @@ public class ExperiencesController {
     @GetMapping
     public ResponseEntity<Page<ExperienceResponseDTO>> getExperiences(
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        if (page == null || size == null)
-            return ResponseEntity.ok(experienceService.getExperiences(PageRequest.of(0, Integer.MAX_VALUE)));
-        return ResponseEntity.ok(experienceService.getExperiences(PageRequest.of(page, size)));
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String title) throws ResourceNotFoundException {
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
+
+        return ResponseEntity.ok(experienceService.searchExperiences(categoryId, title, pageRequest));
     }
 
     @GetMapping("/{experienceId}")

@@ -22,4 +22,6 @@ public class ExperienceResponseDTO {
     private String categoryName;
     private Long publisherId;
     private String publisherName;
+    private Double averageRating;
+    private Integer reviewCount;
 }

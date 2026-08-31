@@ -55,5 +55,8 @@ public class Experience {
     private User publisher;
 
     @OneToMany(mappedBy = "experience")
+    private List<Review> reviews;
+
+    @OneToMany(mappedBy = "experience")
     private List<ExperienceSession> sessions;
 }

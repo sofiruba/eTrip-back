@@ -16,6 +16,9 @@ import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 public interface ExperienceService {
     Page<ExperienceResponseDTO> getExperiences(Pageable pageable);
 
+    Page<ExperienceResponseDTO> searchExperiences(Long categoryId, String title, Pageable pageable)
+            throws ResourceNotFoundException;
+
     ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
 
     ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image, Long publisherId)

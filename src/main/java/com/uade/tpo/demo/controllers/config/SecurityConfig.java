@@ -44,6 +44,8 @@ public class SecurityConfig {
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/bookings/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
+                                                .requestMatchers("/reviews/**")
+                                                .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/discount-coupons/**")
                                                 .hasAnyAuthority(Role.ADMIN.name())
                                                 .anyRequest()

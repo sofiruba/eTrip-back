@@ -2,6 +2,7 @@ package com.uade.tpo.demo.service.impl;
 
 import java.io.IOException;
 import java.util.Base64;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -13,6 +14,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
+import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -41,6 +43,30 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     @Override
     @Transactional(readOnly = true)
+    public Page<ExperienceResponseDTO> searchExperiences(Long categoryId, String title, Pageable pageable)
+            throws ResourceNotFoundException {
+        String normalizedTitle = trimToNull(title);
+
+        if (categoryId != null && normalizedTitle != null) {
+            validateCategoryExists(categoryId);
+            return experienceRepository.findByCategoryIdAndTitleContainingIgnoreCase(categoryId, normalizedTitle, pageable)
+                    .map(this::toResponse);
+        }
+
+        if (categoryId != null) {
+            validateCategoryExists(categoryId);
+            return experienceRepository.findByCategoryId(categoryId, pageable).map(this::toResponse);
+        }
+
+        if (normalizedTitle != null) {
+            return experienceRepository.findByTitleContainingIgnoreCase(normalizedTitle, pageable).map(this::toResponse);
+        }
+
+        return getExperiences(pageable);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException {
         return toResponse(findExperience(experienceId));
     }
@@ -50,7 +76,7 @@ public class ExperienceServiceImpl implements ExperienceService {
     public ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image, Long publisherId)
             throws ResourceNotFoundException, BadRequestException, IOException {
         validateData(request);
-        if (image == null || image.isEmpty()) {
+        if (publisherId == null || image == null || image.isEmpty()) {
             throw new BadRequestException();
         }
 
@@ -105,15 +131,23 @@ public class ExperienceServiceImpl implements ExperienceService {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
+
         if (experience.getSessions() != null && !experience.getSessions().isEmpty()) {
             throw new BadRequestException();
         }
+
         experienceRepository.delete(experience);
     }
 
     private Experience findExperience(Long experienceId) throws ResourceNotFoundException {
         return experienceRepository.findById(experienceId)
                 .orElseThrow(ResourceNotFoundException::new);
+    }
+
+    private void validateCategoryExists(Long categoryId) throws ResourceNotFoundException {
+        if (!experienceCategoryRepository.existsById(categoryId)) {
+            throw new ResourceNotFoundException();
+        }
     }
 
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {
@@ -127,6 +161,9 @@ public class ExperienceServiceImpl implements ExperienceService {
     }
 
     private void validateData(ExperienceRequestDTO request) throws BadRequestException {
+        if (request == null) {
+            throw new BadRequestException();
+        }
         if (request.getTitle() == null || request.getTitle().isBlank()) {
             throw new BadRequestException();
         }
@@ -147,6 +184,12 @@ public class ExperienceServiceImpl implements ExperienceService {
     }
 
     private ExperienceResponseDTO toResponse(Experience experience) {
+        List<Review> reviews = experience.getReviews();
+        int reviewCount = reviews != null ? reviews.size() : 0;
+        Double averageRating = reviewCount > 0
+                ? reviews.stream().mapToInt(Review::getRating).average().orElse(0)
+                : null;
+
         return ExperienceResponseDTO.builder()
                 .id(experience.getId())
                 .title(experience.getTitle())
@@ -160,6 +203,8 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .categoryName(experience.getCategory() != null ? experience.getCategory().getName() : null)
                 .publisherId(experience.getPublisher() != null ? experience.getPublisher().getId() : null)
                 .publisherName(publisherName(experience.getPublisher()))
+                .averageRating(averageRating)
+                .reviewCount(reviewCount)
                 .build();
     }
 
