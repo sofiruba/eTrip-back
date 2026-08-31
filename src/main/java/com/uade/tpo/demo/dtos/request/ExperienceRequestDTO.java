@@ -17,5 +17,4 @@ public class ExperienceRequestDTO {
     private BigDecimal price;
     private String location;
     private Long categoryId;
-    private Long publisherId;
 }

@@ -43,7 +43,7 @@ public class Experience {
     private String location;
 
     @Lob
-    @Column(name = "image")
+    @Column(name = "image", columnDefinition = "LONGBLOB")
     private byte[] image;
 
     @ManyToOne(fetch = FetchType.LAZY)

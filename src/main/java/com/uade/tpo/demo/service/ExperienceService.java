@@ -8,6 +8,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
+import com.uade.tpo.demo.entity.User;
+import com.uade.tpo.demo.exceptions.BadRequestException;
+import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
 public interface ExperienceService {
@@ -15,11 +18,13 @@ public interface ExperienceService {
 
     ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
 
-    ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image)
-            throws ResourceNotFoundException, IOException;
+    ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image, Long publisherId)
+            throws ResourceNotFoundException, BadRequestException, IOException;
 
-    ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request, MultipartFile image)
-            throws ResourceNotFoundException, IOException;
+    ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request, MultipartFile image,
+            User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException, IOException;
 
-    void deleteExperience(Long experienceId) throws ResourceNotFoundException;
+    void deleteExperience(Long experienceId, User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 }
