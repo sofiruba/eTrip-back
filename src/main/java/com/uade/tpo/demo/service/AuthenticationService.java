@@ -26,12 +26,14 @@ public class AuthenticationService {
         private final AuthenticationManager authenticationManager;
 
         public AuthenticationResponse register(RegisterRequest request) {
+                // El registro publico siempre crea CLIENTE. Los ADMIN se dan de alta a mano
+                // en la base (UPDATE user SET role='ADMIN' WHERE email=...), no por la API.
                 var user = User.builder()
                                 .firstName(request.getFirstname())
                                 .lastName(request.getLastname())
                                 .email(request.getEmail())
                                 .password(passwordEncoder.encode(request.getPassword()))
-                                .role(request.getRole() != null ? request.getRole() : Role.CLIENTE)
+                                .role(Role.CLIENTE)
                                 .build();
 
                 repository.save(user);

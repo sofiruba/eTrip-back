@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.controllers.coupons;
 
+import java.net.URI;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.service.DiscountCouponService;
 
@@ -31,48 +34,36 @@ public class DiscountCouponsController {
     public ResponseEntity<Page<DiscountCouponResponseDTO>> getCoupons(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size) {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Armar PageRequest con defaults cuando page o size sean null.
-        // 2. Llamar a discountCouponService.getCoupons(pageRequest).
-        // 3. Retornar ResponseEntity.ok(resultado).
-        return null;
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
+
+        return ResponseEntity.ok(discountCouponService.getCoupons(pageRequest));
     }
 
     @GetMapping("/{couponId}")
     public ResponseEntity<DiscountCouponResponseDTO> getCouponById(@PathVariable Long couponId)
             throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Llamar a discountCouponService.getCouponById(couponId).
-        // 2. Retornar ResponseEntity.ok(dto).
-        return null;
+        return ResponseEntity.ok(discountCouponService.getCouponById(couponId));
     }
 
     @PostMapping
-    public ResponseEntity<DiscountCouponResponseDTO> createCoupon(@RequestBody DiscountCouponRequestDTO request) {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Validar que el usuario autenticado tenga rol ADMIN.
-        // 2. Delegar en discountCouponService.createCoupon(request).
-        // 3. Retornar ResponseEntity.created(URI.create("/discount-coupons/" + result.getId())).body(result).
-        return null;
+    public ResponseEntity<DiscountCouponResponseDTO> createCoupon(@RequestBody DiscountCouponRequestDTO request)
+            throws BadRequestException {
+        DiscountCouponResponseDTO result = discountCouponService.createCoupon(request);
+        return ResponseEntity.created(URI.create("/discount-coupons/" + result.getId())).body(result);
     }
 
     @PutMapping("/{couponId}")
     public ResponseEntity<DiscountCouponResponseDTO> updateCoupon(
             @PathVariable Long couponId,
-            @RequestBody DiscountCouponRequestDTO request) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Validar que el usuario autenticado tenga rol ADMIN.
-        // 2. Delegar en discountCouponService.updateCoupon(couponId, request).
-        // 3. Retornar ResponseEntity.ok(dto).
-        return null;
+            @RequestBody DiscountCouponRequestDTO request) throws ResourceNotFoundException, BadRequestException {
+        return ResponseEntity.ok(discountCouponService.updateCoupon(couponId, request));
     }
 
     @DeleteMapping("/{couponId}")
     public ResponseEntity<Void> deleteCoupon(@PathVariable Long couponId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Validar que el usuario autenticado tenga rol ADMIN.
-        // 2. Delegar en discountCouponService.deleteCoupon(couponId).
-        // 3. Retornar ResponseEntity.noContent().build().
-        return null;
+        discountCouponService.deleteCoupon(couponId);
+        return ResponseEntity.noContent().build();
     }
 }

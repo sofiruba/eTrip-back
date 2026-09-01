@@ -80,11 +80,16 @@ Ambos devuelven `{ "access_token": "<JWT>" }`. Ese token va en el header
 | Persona | Módulo | Estado |
 |---|---|---|
 | 1 | **Catálogo** (categorías, experiencias, imágenes) | ✅ Implementado |
-| 2 | Sesiones / Turnos | Stubs |
-| 3 | Carrito | Stubs |
-| 4 | Reservas y Descuentos | Stubs |
+| 2 | **Sesiones / Turnos** | ✅ Implementado |
+| 3 | Carrito | 🚧 En progreso (otro integrante) |
+| 4 | **Reservas y Descuentos** (cupones, confirmación, vouchers) | ✅ Implementado |
 
-Login y registro ya venían resueltos en el proyecto base.
+Login y registro ya venían resueltos en el proyecto base. El registro público siempre crea
+`CLIENTE`; los `ADMIN` se dan de alta a mano en la base.
+
+> El proyecto base traía un ejemplo genérico de e-commerce (`Product` / `Category` /
+> `CategoriesController`). Se eliminó porque el dominio real de eTrip usa
+> `Experience` / `ExperienceCategory`.
 
 ---
 
@@ -180,3 +185,81 @@ Antes de implementar el catálogo hubo que dejar el proyecto compilando y arranc
   `unique` a `email`.
 - `application.properties`: base `etrip_db` y credenciales.
 - `Experience.image` se creaba como `tinyblob` (255 bytes); se forzó a `LONGBLOB`.
+
+---
+
+# Módulo Sesiones / Turnos (Persona 2)
+
+Base: `/experience-sessions` · Requiere rol `CLIENTE` o `ADMIN`.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/experience-sessions?page=&size=&experienceId=` | Lista paginada (opcional filtrar por experiencia). |
+| `GET` | `/experience-sessions/experience/{experienceId}` | Sesiones de una experiencia. |
+| `GET` | `/experience-sessions/{sessionId}` | Sesión por id. `404` si no existe. |
+| `POST` | `/experience-sessions` | Crea. Body: `{ "experienceId", "startsAt", "endsAt", "capacity" }`. |
+| `PUT` | `/experience-sessions/{sessionId}` | Actualiza (campos opcionales). |
+| `DELETE` | `/experience-sessions/{sessionId}` | Elimina. `400` si tiene reservas. |
+
+**Reglas:** `startsAt` < `endsAt`, `startsAt` a futuro, `capacity` > 0, sin solapamiento de
+horario dentro de la misma experiencia. Al crear, `availableSeats = capacity`.
+
+---
+
+# Módulo Carrito (Persona 3)
+
+🚧 Lo está implementando otro integrante. Stubs en `CartServiceImpl` / `CartsController`.
+El checkout de Persona 4 lee el carrito por la relación `Cart.items` (no depende de esos stubs).
+
+---
+
+# Módulo Reservas y Descuentos (Persona 4)
+
+No se usa "orden de compra" como concepto de UX: el flujo es
+**Carrito → confirmar reserva (`POST /orders`) → Bookings/Vouchers**. Internamente `Order` es el
+comprobante que agrupa los vouchers y guarda subtotal / descuento / total / cupón.
+
+## Cupones — `/discount-coupons`
+
+| Método | Ruta | Rol | Descripción |
+|---|---|---|---|
+| `GET` | `/discount-coupons?page=&size=` | CLIENTE / ADMIN | Lista cupones. |
+| `GET` | `/discount-coupons/{id}` | CLIENTE / ADMIN | Cupón por id. `404` si no existe. |
+| `POST` | `/discount-coupons` | **ADMIN** | Crea. Body: `{ "code", "percentage", "validFrom?", "validUntil?", "active?" }`. |
+| `PUT` | `/discount-coupons/{id}` | **ADMIN** | Actualiza (campos opcionales). |
+| `DELETE` | `/discount-coupons/{id}` | **ADMIN** | Si el cupón nunca se usó lo borra; si ya se usó en una reserva lo **desactiva** (`active=false`). |
+
+**Reglas:** `code` obligatorio y único (case-insensitive, se guarda en mayúsculas);
+`0 < percentage <= 100`; si vienen ambas fechas, `validFrom` < `validUntil`. `active` por
+defecto `true`.
+
+## Reservas — `/orders` y `/bookings`
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/orders` | Confirma el carrito del usuario. Body opcional: `{ "couponCode" }`. |
+| `GET` | `/orders?page=&size=` | Reservas del usuario autenticado (ADMIN ve todas). |
+| `GET` | `/orders/{orderId}` | Reserva por id. `403` si no es del usuario ni ADMIN. |
+| `GET` | `/bookings?page=&size=` | Vouchers del usuario autenticado (ADMIN ve todos). |
+| `GET` | `/bookings/{bookingId}` | Voucher por id. `403` si no es del usuario ni ADMIN. |
+
+**`POST /orders` hace:**
+1. Busca el carrito del usuario (`404` si no tiene) y valida que **no esté vacío** (`400`).
+2. Revalida `availableSeats` de cada sesión (`400` si no alcanza).
+3. `subtotal` = Σ `precioExperiencia * cantidad`.
+4. Si hay `couponCode`: lo busca (`404`), valida `active` + vigencia (`400`) y calcula
+   `discountAmount = subtotal * percentage / 100` (2 decimales, `HALF_UP`).
+5. `total = subtotal - discountAmount`.
+6. Crea el `Order`, y **un `Booking` por cada item** con `voucherCode` `ETRIP-XXXXXXXX`.
+7. **Descuenta** `availableSeats` de cada sesión.
+8. **Vacía** el carrito.
+
+## Archivos del módulo 4
+
+| Archivo | |
+|---|---|
+| `service/impl/DiscountCouponServiceImpl.java` | Lógica de cupones |
+| `service/impl/OrderServiceImpl.java` | Confirmación de reserva (checkout) |
+| `service/impl/BookingServiceImpl.java` | Consulta de vouchers |
+| `controllers/coupons/DiscountCouponsController.java` | Endpoints de cupones |
+| `controllers/orders/OrdersController.java`, `controllers/bookings/BookingsController.java` | Endpoints de reservas / vouchers |

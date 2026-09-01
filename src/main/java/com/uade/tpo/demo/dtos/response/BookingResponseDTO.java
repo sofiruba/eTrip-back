@@ -16,7 +16,10 @@ public class BookingResponseDTO {
     private String voucherCode;
     private Long orderId;
     private Long experienceSessionId;
+    private Long experienceId;
     private String experienceTitle;
+    private LocalDateTime startsAt;
+    private LocalDateTime endsAt;
     private Integer quantity;
     private LocalDateTime createdAt;
 }

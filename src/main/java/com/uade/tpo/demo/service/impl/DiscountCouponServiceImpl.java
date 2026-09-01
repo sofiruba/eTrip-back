@@ -1,5 +1,9 @@
 package com.uade.tpo.demo.service.impl;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.Optional;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -7,8 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
+import com.uade.tpo.demo.entity.DiscountCoupon;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
+import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.service.DiscountCouponService;
 
 import lombok.RequiredArgsConstructor;
@@ -18,58 +25,131 @@ import lombok.RequiredArgsConstructor;
 public class DiscountCouponServiceImpl implements DiscountCouponService {
 
     private final DiscountCouponRepository discountCouponRepository;
+    private final OrderRepository orderRepository;
 
     @Override
+    @Transactional(readOnly = true)
     public Page<DiscountCouponResponseDTO> getCoupons(Pageable pageable) {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Consultar discountCouponRepository.findAll(pageable).
-        // 2. Mapear cada DiscountCoupon a DiscountCouponResponseDTO.
-        // 3. Retornar Page<DiscountCouponResponseDTO>.
-        return null;
+        return discountCouponRepository.findAll(pageable).map(this::toResponse);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public DiscountCouponResponseDTO getCouponById(Long couponId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar DiscountCoupon por id. Lanzar ResourceNotFoundException si no existe.
-        // 2. Mapear code, percentage, validFrom, validUntil y active.
-        // 3. Retornar DiscountCouponResponseDTO.
-        return null;
+        return toResponse(discountCouponRepository.findById(couponId)
+                .orElseThrow(ResourceNotFoundException::new));
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public DiscountCouponResponseDTO createCoupon(DiscountCouponRequestDTO request) {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Validar que code no venga vacio y que percentage sea valido.
-        // 2. Verificar que no exista otro cupon con el mismo code.
-        // 3. Validar que validFrom sea anterior a validUntil.
-        // 4. Instanciar DiscountCoupon con active true/false segun request.
-        // 5. Guardar usando discountCouponRepository.save().
-        // 6. Mapear y retornar DiscountCouponResponseDTO.
-        return null;
+    public DiscountCouponResponseDTO createCoupon(DiscountCouponRequestDTO request) throws BadRequestException {
+        if (request == null) {
+            throw new BadRequestException();
+        }
+
+        String code = requireCode(request.getCode());
+        if (discountCouponRepository.findByCode(code).isPresent()) {
+            throw new BadRequestException();
+        }
+
+        BigDecimal percentage = requirePercentage(request.getPercentage());
+        validateDateRange(request.getValidFrom(), request.getValidUntil());
+
+        DiscountCoupon coupon = DiscountCoupon.builder()
+                .code(code)
+                .percentage(percentage)
+                .validFrom(request.getValidFrom())
+                .validUntil(request.getValidUntil())
+                .active(request.getActive() != null ? request.getActive() : Boolean.TRUE)
+                .build();
+
+        return toResponse(discountCouponRepository.save(coupon));
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public DiscountCouponResponseDTO updateCoupon(Long couponId, DiscountCouponRequestDTO request)
-            throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar DiscountCoupon por id. Lanzar ResourceNotFoundException si no existe.
-        // 2. Validar que el nuevo code no duplique otro cupon.
-        // 3. Actualizar percentage, fechas de vigencia y active.
-        // 4. Guardar usando discountCouponRepository.save().
-        // 5. Mapear y retornar DiscountCouponResponseDTO.
-        return null;
+            throws ResourceNotFoundException, BadRequestException {
+        DiscountCoupon coupon = discountCouponRepository.findById(couponId)
+                .orElseThrow(ResourceNotFoundException::new);
+        if (request == null) {
+            throw new BadRequestException();
+        }
+
+        if (request.getCode() != null) {
+            String code = requireCode(request.getCode());
+            Optional<DiscountCoupon> sameCode = discountCouponRepository.findByCode(code);
+            if (sameCode.isPresent() && !sameCode.get().getId().equals(couponId)) {
+                throw new BadRequestException();
+            }
+            coupon.setCode(code);
+        }
+
+        if (request.getPercentage() != null) {
+            coupon.setPercentage(requirePercentage(request.getPercentage()));
+        }
+        if (request.getValidFrom() != null) {
+            coupon.setValidFrom(request.getValidFrom());
+        }
+        if (request.getValidUntil() != null) {
+            coupon.setValidUntil(request.getValidUntil());
+        }
+        validateDateRange(coupon.getValidFrom(), coupon.getValidUntil());
+
+        if (request.getActive() != null) {
+            coupon.setActive(request.getActive());
+        }
+
+        return toResponse(discountCouponRepository.save(coupon));
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteCoupon(Long couponId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar DiscountCoupon por id. Lanzar ResourceNotFoundException si no existe.
-        // 2. Validar si ya fue usado en alguna Order.
-        // 3. Definir si corresponde borrado fisico o desactivarlo con active=false.
-        // 4. Ejecutar la accion definida.
+        DiscountCoupon coupon = discountCouponRepository.findById(couponId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        // Si el cupon ya fue usado en alguna reserva no se borra: se desactiva para
+        // conservar la integridad historica de esas ordenes.
+        if (orderRepository.existsByDiscountCouponId(couponId)) {
+            coupon.setActive(false);
+            discountCouponRepository.save(coupon);
+            return;
+        }
+
+        discountCouponRepository.delete(coupon);
+    }
+
+    private String requireCode(String code) throws BadRequestException {
+        if (code == null || code.isBlank()) {
+            throw new BadRequestException();
+        }
+        return code.trim().toUpperCase();
+    }
+
+    private BigDecimal requirePercentage(BigDecimal percentage) throws BadRequestException {
+        if (percentage == null
+                || percentage.signum() <= 0
+                || percentage.compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new BadRequestException();
+        }
+        return percentage;
+    }
+
+    private void validateDateRange(LocalDateTime validFrom, LocalDateTime validUntil) throws BadRequestException {
+        if (validFrom != null && validUntil != null && !validFrom.isBefore(validUntil)) {
+            throw new BadRequestException();
+        }
+    }
+
+    private DiscountCouponResponseDTO toResponse(DiscountCoupon coupon) {
+        return DiscountCouponResponseDTO.builder()
+                .id(coupon.getId())
+                .code(coupon.getCode())
+                .percentage(coupon.getPercentage())
+                .validFrom(coupon.getValidFrom())
+                .validUntil(coupon.getValidUntil())
+                .active(coupon.getActive())
+                .build();
     }
 }

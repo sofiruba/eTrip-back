@@ -2,14 +2,13 @@ package com.uade.tpo.demo.controllers.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-import org.springframework.security.web.authentication.logout.LogoutHandler;
 
 import com.uade.tpo.demo.entity.Role;
 
@@ -31,7 +30,6 @@ public class SecurityConfig {
                                 .csrf(AbstractHttpConfigurer::disable)
                                 .authorizeHttpRequests(req -> req.requestMatchers("/api/v1/auth/**").permitAll()
                                                 .requestMatchers("/error/**").permitAll()
-                                                .requestMatchers("/categories/**").hasAnyAuthority(Role.CLIENTE.name())
                                                 .requestMatchers("/experience-categories/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/experiences/**")
@@ -45,6 +43,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/bookings/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/reviews/**")
+                                                .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
+                                                .requestMatchers(HttpMethod.GET, "/discount-coupons/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/discount-coupons/**")
                                                 .hasAnyAuthority(Role.ADMIN.name())
