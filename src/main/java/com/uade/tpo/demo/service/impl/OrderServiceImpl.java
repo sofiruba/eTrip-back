@@ -152,18 +152,8 @@ public class OrderServiceImpl implements OrderService {
                 .findByCode(request.getCouponCode().trim().toUpperCase())
                 .orElseThrow(ResourceNotFoundException::new);
 
-        if (coupon.getActive() == null || !coupon.getActive()) {
-            throw new BadRequestException();
-        }
-        if (coupon.getPercentage() == null || coupon.getPercentage().signum() <= 0) {
-            throw new BadRequestException();
-        }
-
-        LocalDateTime now = LocalDateTime.now();
-        if (coupon.getValidFrom() != null && now.isBefore(coupon.getValidFrom())) {
-            throw new BadRequestException();
-        }
-        if (coupon.getValidUntil() != null && now.isAfter(coupon.getValidUntil())) {
+        // Mismo criterio de validez que GET /discount-coupons/validate.
+        if (DiscountCouponServiceImpl.reasonIfInvalid(coupon) != null) {
             throw new BadRequestException();
         }
 

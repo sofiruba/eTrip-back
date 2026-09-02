@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
+import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -16,8 +17,8 @@ import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 public interface ExperienceService {
     Page<ExperienceResponseDTO> getExperiences(Pageable pageable);
 
-    Page<ExperienceResponseDTO> searchExperiences(Long categoryId, String title, Pageable pageable)
-            throws ResourceNotFoundException;
+    Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
+            throws ResourceNotFoundException, BadRequestException;
 
     ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
 

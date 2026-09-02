@@ -127,11 +127,25 @@ Base: `/experiences` · Requiere rol `CLIENTE` o `ADMIN`.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/experiences?page=&size=` | Lista paginada, con `imageBase64`. |
+| `GET` | `/experiences?page=&size=&...` | Lista paginada con filtros (ver abajo). |
+| `GET` | `/experiences/mine?page=&size=` | Mis experiencias publicadas (modo vendedor). |
 | `GET` | `/experiences/{id}` | Experiencia por id. `404` si no existe. |
 | `POST` | `/experiences` | Crea. `multipart/form-data`: parte `experience` (JSON) + parte `image` (archivo, **obligatoria**). |
 | `PUT` | `/experiences/{id}` | Actualiza. `multipart/form-data`: `experience` (JSON) + `image` (opcional; si no viene, mantiene la actual). Solo el **dueño** o un **ADMIN**. |
 | `DELETE` | `/experiences/{id}` | Elimina. Solo el **dueño** o un **ADMIN**. `400` si tiene sesiones asociadas. |
+
+**Filtros de `GET /experiences`** (todos opcionales, se combinan con AND):
+
+| Param | Efecto |
+|---|---|
+| `categoryId` | Categoría exacta. `404` si la categoría no existe. |
+| `title` | Coincidencia parcial (case-insensitive) en el título. |
+| `location` | Coincidencia parcial (case-insensitive) en la ubicación. |
+| `minPrice` / `maxPrice` | Rango de precio. `minPrice > maxPrice` → `400`. |
+| `publisherId` | Experiencias de un vendedor. |
+| `dateFrom` / `dateTo` | Experiencias que tienen **al menos una sesión** con `startsAt` en ese rango (formato ISO `2027-06-15T10:00:00`). `dateFrom > dateTo` → `400`. |
+
+Implementado con `JpaSpecificationExecutor` (`ExperienceSpecifications`).
 
 **Body de `experience` (parte JSON):**
 ```json
@@ -224,6 +238,7 @@ comprobante que agrupa los vouchers y guarda subtotal / descuento / total / cup�
 | Método | Ruta | Rol | Descripción |
 |---|---|---|---|
 | `GET` | `/discount-coupons?page=&size=` | CLIENTE / ADMIN | Lista cupones. |
+| `GET` | `/discount-coupons/validate?code=` | CLIENTE / ADMIN | Chequea si un código sirve hoy. Siempre `200`: `{ code, valid, reason, percentage }` (`reason`: `NOT_FOUND` / `INACTIVE` / `NOT_YET_VALID` / `EXPIRED`). |
 | `GET` | `/discount-coupons/{id}` | CLIENTE / ADMIN | Cupón por id. `404` si no existe. |
 | `POST` | `/discount-coupons` | **ADMIN** | Crea. Body: `{ "code", "percentage", "validFrom?", "validUntil?", "active?" }`. |
 | `PUT` | `/discount-coupons/{id}` | **ADMIN** | Actualiza (campos opcionales). |
@@ -240,8 +255,10 @@ defecto `true`.
 | `POST` | `/orders` | Confirma el carrito del usuario. Body opcional: `{ "couponCode" }`. |
 | `GET` | `/orders?page=&size=` | Reservas del usuario autenticado (ADMIN ve todas). |
 | `GET` | `/orders/{orderId}` | Reserva por id. `403` si no es del usuario ni ADMIN. |
-| `GET` | `/bookings?page=&size=` | Vouchers del usuario autenticado (ADMIN ve todos). |
-| `GET` | `/bookings/{bookingId}` | Voucher por id. `403` si no es del usuario ni ADMIN. |
+| `GET` | `/bookings?page=&size=` | Mis vouchers (ADMIN ve todos). |
+| `GET` | `/bookings/sales?page=&size=` | **Modo vendedor:** reservas sobre las experiencias que publiqué (trae `buyerId` / `buyerName`). |
+| `GET` | `/bookings/experience/{experienceId}?page=&size=` | Reservas de una experiencia. Solo el dueño de la experiencia o un ADMIN (`403` / `404`). |
+| `GET` | `/bookings/{bookingId}` | Voucher por id. Lo ve el comprador, el vendedor de esa experiencia, o un ADMIN (`403` en otro caso). |
 
 **`POST /orders` hace:**
 1. Busca el carrito del usuario (`404` si no tiene) y valida que **no esté vacío** (`400`).
@@ -263,3 +280,29 @@ defecto `true`.
 | `service/impl/BookingServiceImpl.java` | Consulta de vouchers |
 | `controllers/coupons/DiscountCouponsController.java` | Endpoints de cupones |
 | `controllers/orders/OrdersController.java`, `controllers/bookings/BookingsController.java` | Endpoints de reservas / vouchers |
+
+---
+
+# Usuarios y Perfil
+
+Base: `/users` · Requiere estar autenticado.
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/users/me` | Mi perfil completo: `id`, `firstName`, `lastName`, `role`, `email`, y contadores `publishedExperiences` / `bookingsCount` / `reviewsCount`. |
+| `PUT` | `/users/me` | Edita `firstName` / `lastName` (al menos uno, sino `400`). Email, contraseña y rol no se tocan acá. |
+| `GET` | `/users/{id}` | Perfil de otro usuario. Público: `id`, nombre, `role`, `publishedExperiences`. El `email` y los contadores privados solo si sos vos mismo o un ADMIN. |
+| `GET` | `/users?page=&size=` | **ADMIN:** lista de usuarios (`403` si no sos ADMIN). |
+| `PATCH` | `/users/{id}/role?role=CLIENTE\|ADMIN` | **ADMIN:** asigna permisos. `400` rol inválido, `403` si intentás cambiarte tu propio rol. |
+
+Cubre el requisito de la consigna "administración de cuentas de usuario, incluyendo la asignación
+de permisos".
+
+## Reseñas — endpoint extra
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/reviews/mine?page=&size=` | Reseñas escritas por el usuario autenticado. |
+
+> `/reviews/**` es el módulo de Sofi. Este endpoint es un agregado read-only
+> (`ReviewRepository.findByUserId` + `ReviewService.getMyReviews`).

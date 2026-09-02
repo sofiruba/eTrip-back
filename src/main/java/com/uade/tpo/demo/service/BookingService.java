@@ -11,6 +11,11 @@ import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 public interface BookingService {
     Page<BookingResponseDTO> getBookings(User user, Pageable pageable);
 
+    Page<BookingResponseDTO> getSales(User seller, Pageable pageable);
+
+    Page<BookingResponseDTO> getBookingsByExperience(Long experienceId, User requester, Pageable pageable)
+            throws ResourceNotFoundException, ForbiddenException;
+
     BookingResponseDTO getBookingById(Long bookingId, User user)
             throws ResourceNotFoundException, ForbiddenException;
 }

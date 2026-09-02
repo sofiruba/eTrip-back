@@ -11,5 +11,9 @@ import com.uade.tpo.demo.entity.Review;
 public interface ReviewRepository extends JpaRepository<Review, Long> {
     Page<Review> findByExperienceId(Long experienceId, Pageable pageable);
 
+    Page<Review> findByUserId(Long userId, Pageable pageable);
+
+    long countByUserId(Long userId);
+
     boolean existsByExperienceIdAndUserId(Long experienceId, Long userId);
 }

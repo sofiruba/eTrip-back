@@ -1,10 +1,13 @@
 package com.uade.tpo.demo.controllers.experiences;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URI;
+import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -20,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
+import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -41,12 +45,38 @@ public class ExperiencesController {
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @RequestParam(required = false) Long categoryId,
-            @RequestParam(required = false) String title) throws ResourceNotFoundException {
-        PageRequest pageRequest = page == null || size == null
-                ? PageRequest.of(0, Integer.MAX_VALUE)
-                : PageRequest.of(page, size);
+            @RequestParam(required = false) String title,
+            @RequestParam(required = false) String location,
+            @RequestParam(required = false) BigDecimal minPrice,
+            @RequestParam(required = false) BigDecimal maxPrice,
+            @RequestParam(required = false) Long publisherId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo)
+            throws ResourceNotFoundException, BadRequestException {
+        ExperienceSearchDTO filter = ExperienceSearchDTO.builder()
+                .categoryId(categoryId)
+                .title(title)
+                .location(location)
+                .minPrice(minPrice)
+                .maxPrice(maxPrice)
+                .publisherId(publisherId)
+                .dateFrom(dateFrom)
+                .dateTo(dateTo)
+                .build();
 
-        return ResponseEntity.ok(experienceService.searchExperiences(categoryId, title, pageRequest));
+        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size)));
+    }
+
+    @GetMapping("/mine")
+    public ResponseEntity<Page<ExperienceResponseDTO>> getMyExperiences(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal User currentUser) throws ResourceNotFoundException, BadRequestException {
+        ExperienceSearchDTO filter = ExperienceSearchDTO.builder()
+                .publisherId(currentUser.getId())
+                .build();
+
+        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size)));
     }
 
     @GetMapping("/{experienceId}")
@@ -81,5 +111,11 @@ public class ExperiencesController {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         experienceService.deleteExperience(experienceId, currentUser);
         return ResponseEntity.noContent().build();
+    }
+
+    private PageRequest pageRequest(Integer page, Integer size) {
+        return page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
     }
 }

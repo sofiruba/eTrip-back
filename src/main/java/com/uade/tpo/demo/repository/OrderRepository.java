@@ -11,5 +11,7 @@ import com.uade.tpo.demo.entity.Order;
 public interface OrderRepository extends JpaRepository<Order, Long> {
     Page<Order> findByUserId(Long userId, Pageable pageable);
 
+    long countByUserId(Long userId);
+
     boolean existsByDiscountCouponId(Long discountCouponId);
 }

@@ -48,6 +48,12 @@ public class ReviewServiceImpl implements ReviewService {
 
     @Override
     @Transactional(readOnly = true)
+    public Page<ReviewResponseDTO> getMyReviews(User currentUser, Pageable pageable) {
+        return reviewRepository.findByUserId(currentUser.getId(), pageable).map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public ReviewResponseDTO getReviewById(Long reviewId) throws ResourceNotFoundException {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(ResourceNotFoundException::new);

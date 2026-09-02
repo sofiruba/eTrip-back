@@ -15,6 +15,8 @@ public interface ReviewService {
 
     Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, Pageable pageable) throws ResourceNotFoundException;
 
+    Page<ReviewResponseDTO> getMyReviews(User currentUser, Pageable pageable);
+
     ReviewResponseDTO getReviewById(Long reviewId) throws ResourceNotFoundException;
 
     ReviewResponseDTO createReview(ReviewRequestDTO request, User currentUser)

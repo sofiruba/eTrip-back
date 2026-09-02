@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
+import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
@@ -22,6 +23,7 @@ import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
+import com.uade.tpo.demo.repository.ExperienceSpecifications;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.ExperienceService;
 
@@ -43,26 +45,26 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ExperienceResponseDTO> searchExperiences(Long categoryId, String title, Pageable pageable)
-            throws ResourceNotFoundException {
-        String normalizedTitle = trimToNull(title);
-
-        if (categoryId != null && normalizedTitle != null) {
-            validateCategoryExists(categoryId);
-            return experienceRepository.findByCategoryIdAndTitleContainingIgnoreCase(categoryId, normalizedTitle, pageable)
-                    .map(this::toResponse);
+    public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
+            throws ResourceNotFoundException, BadRequestException {
+        if (filter == null) {
+            return getExperiences(pageable);
         }
 
-        if (categoryId != null) {
-            validateCategoryExists(categoryId);
-            return experienceRepository.findByCategoryId(categoryId, pageable).map(this::toResponse);
+        if (filter.getCategoryId() != null) {
+            validateCategoryExists(filter.getCategoryId());
+        }
+        if (filter.getMinPrice() != null && filter.getMaxPrice() != null
+                && filter.getMinPrice().compareTo(filter.getMaxPrice()) > 0) {
+            throw new BadRequestException();
+        }
+        if (filter.getDateFrom() != null && filter.getDateTo() != null
+                && filter.getDateFrom().isAfter(filter.getDateTo())) {
+            throw new BadRequestException();
         }
 
-        if (normalizedTitle != null) {
-            return experienceRepository.findByTitleContainingIgnoreCase(normalizedTitle, pageable).map(this::toResponse);
-        }
-
-        return getExperiences(pageable);
+        return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter), pageable)
+                .map(this::toResponse);
     }
 
     @Override
