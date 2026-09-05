@@ -3,6 +3,15 @@ package com.uade.tpo.demo.service.impl;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.uade.tpo.demo.entity.ExperienceSession;
+import com.uade.tpo.demo.dtos.response.CartItemResponseDTO;
+import com.uade.tpo.demo.entity.Cart;
+import com.uade.tpo.demo.entity.CartItem;
+import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.dtos.request.CartItemRequestDTO;
 import com.uade.tpo.demo.dtos.response.CartResponseDTO;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
@@ -11,6 +20,7 @@ import com.uade.tpo.demo.repository.CartRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.CartService;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,58 +42,191 @@ public class CartServiceImpl implements CartService {
         // 4. Mapear CartItem a CartItemResponseDTO incluyendo datos de ExperienceSession y precio de Experience.
         // 5. Calcular total del carrito sumando quantity * unitPrice.
         // 6. Retornar CartResponseDTO.
-        return null;
+        User user = userRepository.findById(userId)
+            .orElseThrow(ResourceNotFoundException::new);
+
+        Cart cart = cartRepository.findByUserId(userId)
+                .orElseGet(() -> {
+                    Cart newCart = Cart.builder()
+                            .user(user)
+                            .items(new ArrayList<>())
+                            .build();
+
+                    return cartRepository.save(newCart);
+                });
+
+        List<CartItemResponseDTO> itemDTOs = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+
+        if (cart.getItems() != null) {
+
+            for (CartItem item : cart.getItems()) {
+
+                BigDecimal unitPrice =
+                        item.getExperienceSession()
+                                .getExperience()
+                                .getPrice();
+
+                CartItemResponseDTO itemDTO = CartItemResponseDTO.builder()
+                        .id(item.getId())
+                        .experienceSessionId(
+                                item.getExperienceSession().getId()
+                        )
+                        .experienceTitle(
+                                item.getExperienceSession()
+                                        .getExperience()
+                                        .getTitle()
+                        )
+                        .quantity(item.getQuantity())
+                        .unitPrice(unitPrice)
+                        .build();
+
+                itemDTOs.add(itemDTO);
+
+                BigDecimal itemTotal =
+                        unitPrice.multiply(
+                                BigDecimal.valueOf(item.getQuantity())
+                        );
+
+                total = total.add(itemTotal);
+            }
+        }
+
+        return CartResponseDTO.builder()
+                .id(cart.getId())
+                .userId(user.getId())
+                .items(itemDTOs)
+                .total(total)
+                .build();
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public CartResponseDTO addItem(CartItemRequestDTO request) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar User con request.getUserId(). Lanzar ResourceNotFoundException si no existe.
-        // 2. Buscar ExperienceSession con request.getExperienceSessionId(). Lanzar ResourceNotFoundException si no existe.
-        // 3. Validar que request.getQuantity() sea mayor a cero.
-        // 4. Validar que la sesion tenga availableSeats suficientes.
-        // 5. Buscar o crear el Cart del usuario.
-        // 6. Si ya existe un CartItem para esa misma ExperienceSession, sumar cantidades.
-        // 7. Si no existe, crear CartItem y asociarlo al Cart y a la ExperienceSession.
-        // 8. Guardar usando cartItemRepository.save().
-        // 9. Retornar el carrito actualizado con getCartByUserId().
-        return null;
+    public CartResponseDTO addItem(CartItemRequestDTO request) throws ResourceNotFoundException, BadRequestException {
+            User user = userRepository.findById(request.getUserId())
+            .orElseThrow(ResourceNotFoundException::new);
+
+    ExperienceSession session = experienceSessionRepository
+                .findById(request.getExperienceSessionId())
+                .orElseThrow(ResourceNotFoundException::new);
+
+        if (request.getQuantity() == null || request.getQuantity() <= 0) {
+            throw new BadRequestException();
+        }
+
+        Cart cart = cartRepository.findByUserId(user.getId())
+                .orElseGet(() -> {
+                    Cart newCart = Cart.builder()
+                            .user(user)
+                            .items(new ArrayList<>())
+                            .build();
+
+                    return cartRepository.save(newCart);
+                });
+
+        CartItem cartItem = cartItemRepository
+                .findByCartIdAndExperienceSessionId(
+                        cart.getId(),
+                        session.getId()
+                )
+                .orElse(null);
+
+        int newQuantity = request.getQuantity();
+
+        if (cartItem != null) {
+            newQuantity += cartItem.getQuantity();
+        }
+
+        if (session.getAvailableSeats() == null
+                || newQuantity > session.getAvailableSeats()) {
+
+            throw new BadRequestException();
+        }
+
+        if (cartItem == null) {
+            cartItem = CartItem.builder()
+                    .cart(cart)
+                    .experienceSession(session)
+                    .quantity(request.getQuantity())
+                    .build();
+        } else {
+            cartItem.setQuantity(newQuantity);
+        }
+
+        cartItemRepository.save(cartItem);
+
+        return getCartByUserId(user.getId());
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO updateItemQuantity(Long userId, Long cartItemId, Integer quantity)
-            throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar User por userId. Lanzar ResourceNotFoundException si no existe.
-        // 2. Buscar CartItem por cartItemId. Lanzar ResourceNotFoundException si no existe.
-        // 3. Validar que el CartItem pertenezca al Cart del usuario.
-        // 4. Validar que quantity sea mayor a cero.
-        // 5. Validar cupos disponibles en la ExperienceSession.
-        // 6. Actualizar quantity y guardar usando cartItemRepository.save().
-        // 7. Retornar CartResponseDTO actualizado.
-        return null;
+            throws ResourceNotFoundException, BadRequestException {
+        
+        User user = userRepository.findById(userId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        CartItem cartItem = cartItemRepository.findById(cartItemId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
+            throw new BadRequestException();
+        }
+
+        if (quantity == null || quantity <= 0) {
+            throw new BadRequestException();
+        }
+
+        ExperienceSession session = cartItem.getExperienceSession();
+
+        if (session.getAvailableSeats() == null
+                || quantity > session.getAvailableSeats()) {
+
+            throw new BadRequestException();
+        }
+
+        cartItem.setQuantity(quantity);
+
+        cartItemRepository.save(cartItem);
+    
+        return getCartByUserId(userId);
+
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void removeItem(Long userId, Long cartItemId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar User por userId. Lanzar ResourceNotFoundException si no existe.
-        // 2. Buscar CartItem por cartItemId. Lanzar ResourceNotFoundException si no existe.
-        // 3. Validar que el item pertenezca al carrito del usuario.
-        // 4. Eliminar usando cartItemRepository.delete().
+          User user = userRepository.findById(userId)
+             .orElseThrow(ResourceNotFoundException::new);
+
+        CartItem cartItem = cartItemRepository.findById(cartItemId)
+             .orElseThrow(ResourceNotFoundException::new);
+
+        if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
+            throw new IllegalArgumentException(
+                   "El item no pertenece al carrito del usuario"
+            );
+        }
+
+        cartItemRepository.delete(cartItem);
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void clearCart(Long userId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar User por userId. Lanzar ResourceNotFoundException si no existe.
-        // 2. Buscar el Cart del usuario.
-        // 3. Si no existe carrito, no hacer nada o lanzar excepcion segun definicion funcional.
-        // 4. Eliminar todos los CartItem asociados al Cart.
-        // 5. Guardar el estado final del Cart si hace falta.
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        Cart cart = cartRepository.findByUserId(user.getId())
+                .orElse(null);
+
+        if (cart == null) {
+            return;
+        }
+
+        if (cart.getItems() != null && !cart.getItems().isEmpty()) {
+            cartItemRepository.deleteAll(cart.getItems());
+        }
     }
 }
