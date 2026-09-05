@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
+import com.uade.tpo.demo.dtos.response.CouponValidationDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
@@ -39,6 +40,12 @@ public class DiscountCouponsController {
                 : PageRequest.of(page, size);
 
         return ResponseEntity.ok(discountCouponService.getCoupons(pageRequest));
+    }
+
+    /** Chequea si un codigo de cupon es aplicable hoy. Siempre 200 (valid true/false + reason). */
+    @GetMapping("/validate")
+    public ResponseEntity<CouponValidationDTO> validateCoupon(@RequestParam String code) {
+        return ResponseEntity.ok(discountCouponService.validateCoupon(code));
     }
 
     @GetMapping("/{couponId}")

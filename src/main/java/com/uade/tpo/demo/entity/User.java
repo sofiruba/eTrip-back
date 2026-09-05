@@ -34,7 +34,17 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true)
     private String email;
 
-    private String name;
+    // Ojo con el nombre del campo: "username" chocaria con UserDetails.getUsername()
+    // (mas abajo, que debe devolver el email para que el login/JWT sigan andando).
+    // Lombok no genera el getter/setter de un campo si ya existe un metodo con ese
+    // nombre en la clase, asi que un campo llamado "username" quedaria SIN getter
+    // real (siempre te devolveria el email por la otra funcion). Por eso el campo
+    // java se llama displayUsername pero mapea a la misma columna "username"
+    // (unique = true; no nullable=false porque ya habia usuarios de prueba sin
+    // username antes de este cambio -- que sea obligatorio se valida en
+    // AuthenticationService.register()).
+    @Column(name = "username", unique = true)
+    private String displayUsername;
 
     private String password;
 

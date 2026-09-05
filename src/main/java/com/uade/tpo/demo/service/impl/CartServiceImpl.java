@@ -21,6 +21,8 @@ import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.CartService;
 import com.uade.tpo.demo.exceptions.BadRequestException;
+import com.uade.tpo.demo.exceptions.ForbiddenException;
+import com.uade.tpo.demo.entity.Experience;
 
 import lombok.RequiredArgsConstructor;
 
@@ -34,14 +36,8 @@ public class CartServiceImpl implements CartService {
     private final UserRepository userRepository;
 
     @Override
+    @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO getCartByUserId(Long userId) throws ResourceNotFoundException {
-        // TODO: Equipo, aca debemos hacer lo siguiente:
-        // 1. Buscar User por id usando userRepository.findById(userId). Lanzar ResourceNotFoundException si no existe.
-        // 2. Buscar Cart usando cartRepository.findByUserId(userId).
-        // 3. Si el usuario aun no tiene carrito, definir si se crea automaticamente o se retorna vacio.
-        // 4. Mapear CartItem a CartItemResponseDTO incluyendo datos de ExperienceSession y precio de Experience.
-        // 5. Calcular total del carrito sumando quantity * unitPrice.
-        // 6. Retornar CartResponseDTO.
         User user = userRepository.findById(userId)
             .orElseThrow(ResourceNotFoundException::new);
 
@@ -58,38 +54,36 @@ public class CartServiceImpl implements CartService {
         List<CartItemResponseDTO> itemDTOs = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
 
-        if (cart.getItems() != null) {
+        // OJO: no usamos cart.getItems() aca. Si el Cart se acaba de crear/tocar en esta misma
+        // transaccion (p. ej. addItem creando el carrito y guardando el primer CartItem), la
+        // colección en memoria de esa instancia de Cart queda vieja/vacía (Hibernate no la
+        // sincroniza sola) y el primer item agregado no aparecía en la respuesta aunque sí
+        // quedaba guardado en la base. Con una query directa por cartId siempre se lee lo que
+        // realmente hay en la base.
+        List<CartItem> items = cartItemRepository.findByCartId(cart.getId());
 
-            for (CartItem item : cart.getItems()) {
+        for (CartItem item : items) {
+            ExperienceSession session = item.getExperienceSession();
+            Experience experience = session.getExperience();
+            // effectivePrice ya contempla el descuento individual del producto (si tiene),
+            // para que el total del carrito coincida con lo que despues cobra el checkout.
+            BigDecimal unitPrice = experience.getEffectivePrice();
+            BigDecimal itemTotal = unitPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
 
-                BigDecimal unitPrice =
-                        item.getExperienceSession()
-                                .getExperience()
-                                .getPrice();
+            CartItemResponseDTO itemDTO = CartItemResponseDTO.builder()
+                    .id(item.getId())
+                    .experienceSessionId(session.getId())
+                    .experienceId(experience.getId())
+                    .experienceTitle(experience.getTitle())
+                    .startsAt(session.getStartsAt())
+                    .endsAt(session.getEndsAt())
+                    .quantity(item.getQuantity())
+                    .unitPrice(unitPrice)
+                    .subtotal(itemTotal)
+                    .build();
 
-                CartItemResponseDTO itemDTO = CartItemResponseDTO.builder()
-                        .id(item.getId())
-                        .experienceSessionId(
-                                item.getExperienceSession().getId()
-                        )
-                        .experienceTitle(
-                                item.getExperienceSession()
-                                        .getExperience()
-                                        .getTitle()
-                        )
-                        .quantity(item.getQuantity())
-                        .unitPrice(unitPrice)
-                        .build();
-
-                itemDTOs.add(itemDTO);
-
-                BigDecimal itemTotal =
-                        unitPrice.multiply(
-                                BigDecimal.valueOf(item.getQuantity())
-                        );
-
-                total = total.add(itemTotal);
-            }
+            itemDTOs.add(itemDTO);
+            total = total.add(itemTotal);
         }
 
         return CartResponseDTO.builder()
@@ -161,8 +155,8 @@ public class CartServiceImpl implements CartService {
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO updateItemQuantity(Long userId, Long cartItemId, Integer quantity)
-            throws ResourceNotFoundException, BadRequestException {
-        
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+
         User user = userRepository.findById(userId)
                 .orElseThrow(ResourceNotFoundException::new);
 
@@ -170,7 +164,7 @@ public class CartServiceImpl implements CartService {
                 .orElseThrow(ResourceNotFoundException::new);
 
         if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
-            throw new BadRequestException();
+            throw new ForbiddenException();
         }
 
         if (quantity == null || quantity <= 0) {
@@ -195,7 +189,7 @@ public class CartServiceImpl implements CartService {
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public void removeItem(Long userId, Long cartItemId) throws ResourceNotFoundException {
+    public void removeItem(Long userId, Long cartItemId) throws ResourceNotFoundException, ForbiddenException {
           User user = userRepository.findById(userId)
              .orElseThrow(ResourceNotFoundException::new);
 
@@ -203,9 +197,9 @@ public class CartServiceImpl implements CartService {
              .orElseThrow(ResourceNotFoundException::new);
 
         if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
-            throw new IllegalArgumentException(
-                   "El item no pertenece al carrito del usuario"
-            );
+            // Antes tiraba IllegalArgumentException (sin @ResponseStatus -> 500). El resto del
+            // proyecto usa ForbiddenException para "esto no es tuyo" -> 403.
+            throw new ForbiddenException();
         }
 
         cartItemRepository.delete(cartItem);
@@ -225,8 +219,9 @@ public class CartServiceImpl implements CartService {
             return;
         }
 
-        if (cart.getItems() != null && !cart.getItems().isEmpty()) {
-            cartItemRepository.deleteAll(cart.getItems());
+        List<CartItem> items = cartItemRepository.findByCartId(cart.getId());
+        if (!items.isEmpty()) {
+            cartItemRepository.deleteAll(items);
         }
     }
 }

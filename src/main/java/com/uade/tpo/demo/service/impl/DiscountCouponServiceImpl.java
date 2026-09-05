@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
+import com.uade.tpo.demo.dtos.response.CouponValidationDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
 import com.uade.tpo.demo.entity.DiscountCoupon;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -38,6 +39,42 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
     public DiscountCouponResponseDTO getCouponById(Long couponId) throws ResourceNotFoundException {
         return toResponse(discountCouponRepository.findById(couponId)
                 .orElseThrow(ResourceNotFoundException::new));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CouponValidationDTO validateCoupon(String code) {
+        String normalized = code == null ? "" : code.trim().toUpperCase();
+        DiscountCoupon coupon = discountCouponRepository.findByCode(normalized).orElse(null);
+
+        String reason = reasonIfInvalid(coupon);
+        return CouponValidationDTO.builder()
+                .code(normalized)
+                .valid(reason == null)
+                .reason(reason)
+                .percentage(coupon != null ? coupon.getPercentage() : null)
+                .build();
+    }
+
+    /** Devuelve null si el cupon es aplicable hoy, o un codigo de motivo si no. */
+    static String reasonIfInvalid(DiscountCoupon coupon) {
+        if (coupon == null) {
+            return "NOT_FOUND";
+        }
+        if (coupon.getActive() == null || !coupon.getActive()) {
+            return "INACTIVE";
+        }
+        if (coupon.getPercentage() == null || coupon.getPercentage().signum() <= 0) {
+            return "INVALID_PERCENTAGE";
+        }
+        LocalDateTime now = LocalDateTime.now();
+        if (coupon.getValidFrom() != null && now.isBefore(coupon.getValidFrom())) {
+            return "NOT_YET_VALID";
+        }
+        if (coupon.getValidUntil() != null && now.isAfter(coupon.getValidUntil())) {
+            return "EXPIRED";
+        }
+        return null;
     }
 
     @Override

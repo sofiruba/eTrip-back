@@ -55,6 +55,18 @@ public class ReviewsController {
         return ResponseEntity.ok(reviewService.getReviewsByExperience(experienceId, pageRequest));
     }
 
+    @GetMapping("/mine")
+    public ResponseEntity<Page<ReviewResponseDTO>> getMyReviews(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal User currentUser) {
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
+
+        return ResponseEntity.ok(reviewService.getMyReviews(currentUser, pageRequest));
+    }
+
     @GetMapping("/{reviewId}")
     public ResponseEntity<ReviewResponseDTO> getReviewById(@PathVariable Long reviewId)
             throws ResourceNotFoundException {

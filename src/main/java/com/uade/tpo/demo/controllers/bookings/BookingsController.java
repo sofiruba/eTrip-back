@@ -25,16 +25,33 @@ public class BookingsController {
 
     private final BookingService bookingService;
 
+    /** Vouchers/reservas que hizo el usuario autenticado (ADMIN ve todos). */
     @GetMapping
     public ResponseEntity<Page<BookingResponseDTO>> getBookings(
             @RequestParam(required = false) Integer page,
             @RequestParam(required = false) Integer size,
             @AuthenticationPrincipal User user) {
-        PageRequest pageRequest = page == null || size == null
-                ? PageRequest.of(0, Integer.MAX_VALUE)
-                : PageRequest.of(page, size);
+        return ResponseEntity.ok(bookingService.getBookings(user, pageRequest(page, size)));
+    }
 
-        return ResponseEntity.ok(bookingService.getBookings(user, pageRequest));
+    /** Vista de vendedor: reservas sobre las experiencias que publico el usuario. */
+    @GetMapping("/sales")
+    public ResponseEntity<Page<BookingResponseDTO>> getSales(
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal User user) {
+        return ResponseEntity.ok(bookingService.getSales(user, pageRequest(page, size)));
+    }
+
+    /** Reservas de una experiencia puntual. Solo el dueño de la experiencia o un ADMIN. */
+    @GetMapping("/experience/{experienceId}")
+    public ResponseEntity<Page<BookingResponseDTO>> getBookingsByExperience(
+            @PathVariable Long experienceId,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal User user) throws ResourceNotFoundException, ForbiddenException {
+        return ResponseEntity.ok(
+                bookingService.getBookingsByExperience(experienceId, user, pageRequest(page, size)));
     }
 
     @GetMapping("/{bookingId}")
@@ -42,5 +59,11 @@ public class BookingsController {
             @PathVariable Long bookingId,
             @AuthenticationPrincipal User user) throws ResourceNotFoundException, ForbiddenException {
         return ResponseEntity.ok(bookingService.getBookingById(bookingId, user));
+    }
+
+    private PageRequest pageRequest(Integer page, Integer size) {
+        return page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
     }
 }

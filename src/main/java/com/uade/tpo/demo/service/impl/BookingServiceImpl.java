@@ -15,6 +15,7 @@ import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.service.BookingService;
 
 import lombok.RequiredArgsConstructor;
@@ -24,14 +25,39 @@ import lombok.RequiredArgsConstructor;
 public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
+    private final ExperienceRepository experienceRepository;
 
     @Override
     @Transactional(readOnly = true)
     public Page<BookingResponseDTO> getBookings(User user, Pageable pageable) {
         Page<Booking> bookings = isAdmin(user)
                 ? bookingRepository.findAll(pageable)
-                : bookingRepository.findByOrderUserId(user.getId(), pageable);
+                : bookingRepository.findByOrder_User_Id(user.getId(), pageable);
         return bookings.map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<BookingResponseDTO> getSales(User seller, Pageable pageable) {
+        return bookingRepository.findByExperienceSession_Experience_Publisher_Id(seller.getId(), pageable)
+                .map(this::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<BookingResponseDTO> getBookingsByExperience(Long experienceId, User requester, Pageable pageable)
+            throws ResourceNotFoundException, ForbiddenException {
+        Experience experience = experienceRepository.findById(experienceId)
+                .orElseThrow(ResourceNotFoundException::new);
+
+        boolean isOwner = experience.getPublisher() != null
+                && experience.getPublisher().getId().equals(requester.getId());
+        if (!isOwner && !isAdmin(requester)) {
+            throw new ForbiddenException();
+        }
+
+        return bookingRepository.findByExperienceSession_Experience_Id(experienceId, pageable)
+                .map(this::toResponse);
     }
 
     @Override
@@ -42,10 +68,17 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(ResourceNotFoundException::new);
 
         Order order = booking.getOrder();
-        boolean isOwner = order != null
+        boolean isBuyer = order != null
                 && order.getUser() != null
                 && order.getUser().getId().equals(user.getId());
-        if (!isOwner && !isAdmin(user)) {
+
+        ExperienceSession session = booking.getExperienceSession();
+        boolean isSeller = session != null
+                && session.getExperience() != null
+                && session.getExperience().getPublisher() != null
+                && session.getExperience().getPublisher().getId().equals(user.getId());
+
+        if (!isBuyer && !isSeller && !isAdmin(user)) {
             throw new ForbiddenException();
         }
 
@@ -59,11 +92,13 @@ public class BookingServiceImpl implements BookingService {
     private BookingResponseDTO toResponse(Booking booking) {
         ExperienceSession session = booking.getExperienceSession();
         Experience experience = session != null ? session.getExperience() : null;
+        Order order = booking.getOrder();
+        User buyer = order != null ? order.getUser() : null;
 
         return BookingResponseDTO.builder()
                 .id(booking.getId())
                 .voucherCode(booking.getVoucherCode())
-                .orderId(booking.getOrder() != null ? booking.getOrder().getId() : null)
+                .orderId(order != null ? order.getId() : null)
                 .experienceSessionId(session != null ? session.getId() : null)
                 .experienceId(experience != null ? experience.getId() : null)
                 .experienceTitle(experience != null ? experience.getTitle() : null)
@@ -71,6 +106,18 @@ public class BookingServiceImpl implements BookingService {
                 .endsAt(session != null ? session.getEndsAt() : null)
                 .quantity(booking.getQuantity())
                 .createdAt(booking.getCreatedAt())
+                .buyerId(buyer != null ? buyer.getId() : null)
+                .buyerName(fullName(buyer))
                 .build();
+    }
+
+    private String fullName(User user) {
+        if (user == null) {
+            return null;
+        }
+        String first = user.getFirstName() != null ? user.getFirstName() : "";
+        String last = user.getLastName() != null ? user.getLastName() : "";
+        String name = (first + " " + last).trim();
+        return name.isEmpty() ? user.getEmail() : name;
     }
 }

@@ -20,6 +20,7 @@ import com.uade.tpo.demo.dtos.response.CartResponseDTO;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.service.CartService;
 import com.uade.tpo.demo.exceptions.BadRequestException;
+import com.uade.tpo.demo.exceptions.ForbiddenException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -62,7 +63,8 @@ public class CartsController {
             @PathVariable Long userId,
             @PathVariable Long cartItemId,
             @RequestParam Integer quantity,
-            @AuthenticationPrincipal User authenticatedUser) throws ResourceNotFoundException, BadRequestException {
+            @AuthenticationPrincipal User authenticatedUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         validateUserAccess(authenticatedUser, userId);
         CartResponseDTO cart = cartService.updateItemQuantity(userId, cartItemId, quantity);
         return ResponseEntity.ok(cart);
@@ -71,8 +73,9 @@ public class CartsController {
     @DeleteMapping("/user/{userId}/items/{cartItemId}")
     public ResponseEntity<Void> removeItem(
             @PathVariable Long userId,
-            @PathVariable Long cartItemId, 
-            @AuthenticationPrincipal User authenticatedUser) throws ResourceNotFoundException {
+            @PathVariable Long cartItemId,
+            @AuthenticationPrincipal User authenticatedUser)
+            throws ResourceNotFoundException, ForbiddenException {
                 validateUserAccess(authenticatedUser, userId);
                 cartService.removeItem(userId, cartItemId);
                 return ResponseEntity.noContent().build();
