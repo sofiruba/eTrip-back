@@ -45,6 +45,11 @@ public final class ExperienceSpecifications {
             if (f.getMaxPrice() != null) {
                 predicates.add(cb.lessThanOrEqualTo(root.get("price"), f.getMaxPrice()));
             }
+            if (Boolean.TRUE.equals(f.getOnlyDiscounted())) {
+                predicates.add(cb.and(
+                        cb.isNotNull(root.get("discountPercentage")),
+                        cb.greaterThan(root.get("discountPercentage"), java.math.BigDecimal.ZERO)));
+            }
             if (f.getDateFrom() != null || f.getDateTo() != null) {
                 Subquery<Long> sub = query.subquery(Long.class);
                 Root<ExperienceSession> session = sub.from(ExperienceSession.class);

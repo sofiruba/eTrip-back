@@ -1,6 +1,7 @@
 package com.uade.tpo.demo.dtos.response;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -16,8 +17,18 @@ public class ExperienceResponseDTO {
     private String title;
     private String description;
     private BigDecimal price;
+
+    /** Porcentaje de descuento aplicado (0-100), null si no tiene. */
+    private BigDecimal discountPercentage;
+
+    /** Precio ya con el descuento aplicado (igual a price si no hay descuento). */
+    private BigDecimal finalPrice;
+
     private String location;
-    private String imageBase64;
+
+    /** Una o mas fotos en Base64, en el orden en que se cargaron. */
+    private List<String> imagesBase64;
+
     private Long categoryId;
     private String categoryName;
     private Long publisherId;

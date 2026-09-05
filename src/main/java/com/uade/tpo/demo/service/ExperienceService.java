@@ -1,6 +1,8 @@
 package com.uade.tpo.demo.service;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -22,12 +24,16 @@ public interface ExperienceService {
 
     ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
 
-    ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image, Long publisherId)
+    ExperienceResponseDTO createExperience(ExperienceRequestDTO request, List<MultipartFile> images, Long publisherId)
             throws ResourceNotFoundException, BadRequestException, IOException;
 
-    ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request, MultipartFile image,
+    ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request, List<MultipartFile> images,
             User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException, IOException;
+
+    /** Gestion de descuentos sobre la experiencia individual. Solo el dueño o un ADMIN. */
+    ExperienceResponseDTO updateDiscount(Long experienceId, BigDecimal discountPercentage, User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
     void deleteExperience(Long experienceId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;

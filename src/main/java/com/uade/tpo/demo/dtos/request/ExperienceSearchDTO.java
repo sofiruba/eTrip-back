@@ -24,4 +24,7 @@ public class ExperienceSearchDTO {
     private Long publisherId;
     private LocalDateTime dateFrom;
     private LocalDateTime dateTo;
+
+    /** true = solo experiencias con descuento activo (para la seccion "ofertas"). */
+    private Boolean onlyDiscounted;
 }

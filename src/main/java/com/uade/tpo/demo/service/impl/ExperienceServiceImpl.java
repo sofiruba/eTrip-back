@@ -1,6 +1,8 @@
 package com.uade.tpo.demo.service.impl;
 
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 
@@ -15,6 +17,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
+import com.uade.tpo.demo.entity.ExperienceImage;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
@@ -75,10 +78,12 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public ExperienceResponseDTO createExperience(ExperienceRequestDTO request, MultipartFile image, Long publisherId)
+    public ExperienceResponseDTO createExperience(ExperienceRequestDTO request, List<MultipartFile> images,
+            Long publisherId)
             throws ResourceNotFoundException, BadRequestException, IOException {
         validateData(request);
-        if (publisherId == null || image == null || image.isEmpty()) {
+        List<MultipartFile> validImages = nonEmptyImages(images);
+        if (publisherId == null || validImages.isEmpty()) {
             throw new BadRequestException();
         }
 
@@ -92,18 +97,19 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .description(trimToNull(request.getDescription()))
                 .price(request.getPrice())
                 .location(trimToNull(request.getLocation()))
-                .image(image.getBytes())
                 .category(category)
                 .publisher(publisher)
                 .build();
+
+        experience.setImages(toImageEntities(validImages, experience));
 
         return toResponse(experienceRepository.save(experience));
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request, MultipartFile image,
-            User currentUser)
+    public ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request,
+            List<MultipartFile> images, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException, IOException {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
@@ -120,8 +126,34 @@ public class ExperienceServiceImpl implements ExperienceService {
         experience.setPrice(request.getPrice());
         experience.setLocation(trimToNull(request.getLocation()));
 
-        if (image != null && !image.isEmpty()) {
-            experience.setImage(image.getBytes());
+        List<MultipartFile> validImages = nonEmptyImages(images);
+        if (!validImages.isEmpty()) {
+            // Reemplaza el set completo de fotos (orphanRemoval borra las viejas).
+            if (experience.getImages() != null) {
+                experience.getImages().clear();
+            } else {
+                experience.setImages(new ArrayList<>());
+            }
+            experience.getImages().addAll(toImageEntities(validImages, experience));
+        }
+
+        return toResponse(experienceRepository.save(experience));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public ExperienceResponseDTO updateDiscount(Long experienceId, BigDecimal discountPercentage, User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        Experience experience = findExperience(experienceId);
+        assertCanManage(experience, currentUser);
+
+        if (discountPercentage == null || discountPercentage.signum() == 0) {
+            experience.setDiscountPercentage(null);
+        } else {
+            if (discountPercentage.signum() < 0 || discountPercentage.compareTo(BigDecimal.valueOf(100)) >= 0) {
+                throw new BadRequestException();
+            }
+            experience.setDiscountPercentage(discountPercentage);
         }
 
         return toResponse(experienceRepository.save(experience));
@@ -177,6 +209,33 @@ public class ExperienceServiceImpl implements ExperienceService {
         }
     }
 
+    private List<MultipartFile> nonEmptyImages(List<MultipartFile> images) {
+        if (images == null) {
+            return List.of();
+        }
+        List<MultipartFile> result = new ArrayList<>();
+        for (MultipartFile image : images) {
+            if (image != null && !image.isEmpty()) {
+                result.add(image);
+            }
+        }
+        return result;
+    }
+
+    private List<ExperienceImage> toImageEntities(List<MultipartFile> images, Experience experience)
+            throws IOException {
+        List<ExperienceImage> result = new ArrayList<>();
+        int position = 0;
+        for (MultipartFile image : images) {
+            result.add(ExperienceImage.builder()
+                    .image(image.getBytes())
+                    .position(position++)
+                    .experience(experience)
+                    .build());
+        }
+        return result;
+    }
+
     private String trimToNull(String value) {
         if (value == null) {
             return null;
@@ -192,15 +251,24 @@ public class ExperienceServiceImpl implements ExperienceService {
                 ? reviews.stream().mapToInt(Review::getRating).average().orElse(0)
                 : null;
 
+        List<String> imagesBase64 = new ArrayList<>();
+        if (experience.getImages() != null) {
+            for (ExperienceImage image : experience.getImages()) {
+                if (image.getImage() != null) {
+                    imagesBase64.add(Base64.getEncoder().encodeToString(image.getImage()));
+                }
+            }
+        }
+
         return ExperienceResponseDTO.builder()
                 .id(experience.getId())
                 .title(experience.getTitle())
                 .description(experience.getDescription())
                 .price(experience.getPrice())
+                .discountPercentage(experience.getDiscountPercentage())
+                .finalPrice(experience.getEffectivePrice())
                 .location(experience.getLocation())
-                .imageBase64(experience.getImage() != null
-                        ? Base64.getEncoder().encodeToString(experience.getImage())
-                        : null)
+                .imagesBase64(imagesBase64)
                 .categoryId(experience.getCategory() != null ? experience.getCategory().getId() : null)
                 .categoryName(experience.getCategory() != null ? experience.getCategory().getName() : null)
                 .publisherId(experience.getPublisher() != null ? experience.getPublisher().getId() : null)

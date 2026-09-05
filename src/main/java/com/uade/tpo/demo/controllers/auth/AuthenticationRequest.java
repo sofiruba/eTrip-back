@@ -11,6 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class AuthenticationRequest {
 
-    private String email;
+    /** Acepta el email o el username del usuario. */
+    private String usernameOrEmail;
     String password;
 }

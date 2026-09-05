@@ -93,8 +93,9 @@ public class OrderServiceImpl implements OrderService {
                 throw new BadRequestException();
             }
             Experience experience = session.getExperience();
-            BigDecimal unitPrice = experience != null && experience.getPrice() != null
-                    ? experience.getPrice()
+            // effectivePrice ya contempla el descuento individual del producto (si tiene).
+            BigDecimal unitPrice = experience != null && experience.getEffectivePrice() != null
+                    ? experience.getEffectivePrice()
                     : BigDecimal.ZERO;
             subtotal = subtotal.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
@@ -168,9 +169,20 @@ public class OrderServiceImpl implements OrderService {
         return user != null && user.getRole() == Role.ADMIN;
     }
 
+    private String buyerName(User user) {
+        if (user == null) {
+            return null;
+        }
+        String first = user.getFirstName() != null ? user.getFirstName() : "";
+        String last = user.getLastName() != null ? user.getLastName() : "";
+        String name = (first + " " + last).trim();
+        return name.isEmpty() ? user.getEmail() : name;
+    }
+
     private OrderResponseDTO toResponse(Order order) {
         List<BookingResponseDTO> bookingDtos = new ArrayList<>();
         List<Booking> bookings = order.getBookings();
+        User buyer = order.getUser();
         if (bookings != null) {
             for (Booking booking : bookings) {
                 ExperienceSession session = booking.getExperienceSession();
@@ -186,6 +198,8 @@ public class OrderServiceImpl implements OrderService {
                         .endsAt(session != null ? session.getEndsAt() : null)
                         .quantity(booking.getQuantity())
                         .createdAt(booking.getCreatedAt())
+                        .buyerId(buyer != null ? buyer.getId() : null)
+                        .buyerName(buyerName(buyer))
                         .build());
             }
         }

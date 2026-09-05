@@ -125,6 +125,7 @@ public class UserServiceImpl implements UserService {
     private UserResponseDTO toResponse(User user, boolean includePrivate) {
         UserResponseDTO.UserResponseDTOBuilder builder = UserResponseDTO.builder()
                 .id(user.getId())
+                .username(user.getDisplayUsername())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole() != null ? user.getRole().name() : null)

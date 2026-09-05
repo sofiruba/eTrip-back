@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.service.AuthenticationService;
 
 import lombok.RequiredArgsConstructor;
@@ -19,7 +20,7 @@ public class AuthenticationController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
-            @RequestBody RegisterRequest request) {
+            @RequestBody RegisterRequest request) throws BadRequestException {
         return ResponseEntity.ok(service.register(request));
     }
 
