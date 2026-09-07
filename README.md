@@ -133,6 +133,8 @@ El JWT es un string en 3 partes (`header.payload.signature`). El `payload` de es
 - `sub` (subject): el **email** del usuario (aunque hayas hecho login con `username`, el token
   siempre guarda el email — es lo que usa `UserDetailsService` para recargar el usuario en cada
   request).
+- `id`: el id numérico del usuario. Se agregó para que un cliente (front, Insomnia) lo pueda leer
+  directamente del token sin tener que pegarle a `GET /users/me` aparte.
 - `iat` / `exp`: fecha de emisión y de expiración (24hs después).
 
 El **rol no viaja en el token**: en cada request, `JwtAuthenticationFilter` vuelve a buscar al

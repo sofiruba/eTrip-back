@@ -13,6 +13,8 @@ import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import com.uade.tpo.demo.entity.User;
+
 @Service
 public class JwtService {
     @Value("${application.security.jwt.secretKey}")
@@ -20,18 +22,20 @@ public class JwtService {
     @Value("${application.security.jwt.expiration}")
     private long jwtExpiration;
 
-    public String generateToken(
-            UserDetails userDetails) {
-        return buildToken(userDetails, jwtExpiration);
+    public String generateToken(User user) {
+        return buildToken(user, jwtExpiration);
     }
 
     private String buildToken(
-            UserDetails userDetails,
+            User user,
             long expiration) {
         return Jwts
                 .builder()
-                .subject(userDetails.getUsername()) // prueba@hotmail.com
+                .subject(user.getUsername()) // email (UserDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
+                // id del usuario, para que un cliente (front, Insomnia) lo pueda leer
+                // del token sin tener que pegarle a /users/me aparte.
+                .claim("id", user.getId())
                 .claim("Gisele", 1234567)
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSecretKey())

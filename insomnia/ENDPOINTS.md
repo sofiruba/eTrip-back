@@ -9,12 +9,20 @@
 2. **Levantar el backend primero** (`./mvnw spring-boot:run`, ver el README para la config de
    MySQL). Si el backend no está corriendo, Insomnia tira error de conexión, no 403.
 3. Correr **POST register** (pide `username` además de nombre/apellido/mail/contraseña) o, si ya
-   tenés usuario, **POST authenticate**. Copiar el valor de `access_token` de la respuesta.
-4. Pegarlo en el environment (`Manage Environments` → variable `token`).
-5. Todas las requests menos `/api/v1/auth/**` mandan `Authorization: Bearer {{ token }}`.
+   tenés usuario, **POST authenticate**. **No hace falta copiar nada a mano**: las 3 requests de
+   `01 - Auth` tienen un *After-Response Script* que guarda `access_token` en la variable `token`
+   del environment, y además saca el `id` del usuario (viaja como claim `id` adentro del JWT, ver
+   `JwtService.buildToken`) y lo guarda en `user_id`. Cada vez que volvés a loguear (otro usuario,
+   otro rol) las dos variables se pisan solas con el último login que hiciste.
+4. Todas las requests menos `/api/v1/auth/**` mandan `Authorization: Bearer {{ token }}`; las de
+   carrito (`/carts/user/{{ _.user_id }}/...`) usan `{{ _.user_id }}` para el usuario dueño.
+
+> Si tu Insomnia es muy viejo y no corre los After-Response Scripts, hacelo a mano: copiar
+> `access_token` de la respuesta → `Manage Environments` → variable `token`; y el `id` de la
+> respuesta de `GET /users/me` → variable `user_id`.
 
 **El 403 más común no es un bug: es que `token` está vacío o vencido** (dura 24hs). Si te tira 403
-en todo, repetí el paso 3-4. Si te tira 403 puntual en un endpoint (ej. crear un cupón, listar
+en todo, repetí el paso 3. Si te tira 403 puntual en un endpoint (ej. crear un cupón, listar
 usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver la tabla de abajo.
 
 ## Reglas de seguridad

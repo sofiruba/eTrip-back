@@ -74,7 +74,8 @@
         "mimeType": "application/json",
         "text": "{\n  \"username\": \"nachoc\",\n  \"firstname\": \"Nacho\",\n  \"lastname\": \"Cortes\",\n  \"email\": \"nacho@etrip.com\",\n  \"password\": \"1234\"\n}"
       },
-      "metaSortKey": -2000
+      "metaSortKey": -2000,
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(Buffer.from(normalized, 'base64').toString('utf-8'));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
     },
     {
       "_id": "req_auth_login",
@@ -93,7 +94,8 @@
         "mimeType": "application/json",
         "text": "{\n  \"usernameOrEmail\": \"nacho@etrip.com\",\n  \"password\": \"1234\"\n}"
       },
-      "metaSortKey": -1999
+      "metaSortKey": -1999,
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(Buffer.from(normalized, 'base64').toString('utf-8'));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
     },
     {
       "_id": "fld_cats",
@@ -772,7 +774,8 @@
         "mimeType": "application/json",
         "text": "{\n  \"usernameOrEmail\": \"nachoc\",\n  \"password\": \"1234\"\n}"
       },
-      "metaSortKey": -1998
+      "metaSortKey": -1998,
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(Buffer.from(normalized, 'base64').toString('utf-8'));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
     },
     {
       "_id": "fld_users",
