@@ -30,11 +30,13 @@ public class UsersController {
 
     private final UserService userService;
 
+    // Mi perfil + contadores. "me" es una ruta literal (no un id): el usuario sale del token.
     @GetMapping("/me")
     public ResponseEntity<UserResponseDTO> getMyProfile(@AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(userService.getMyProfile(currentUser));
     }
 
+    // Edita mis propios datos de perfil.
     @PutMapping("/me")
     public ResponseEntity<UserResponseDTO> updateMyProfile(
             @RequestBody UserUpdateDTO request,
@@ -42,6 +44,7 @@ public class UsersController {
         return ResponseEntity.ok(userService.updateMyProfile(currentUser, request));
     }
 
+    // Perfil de otro usuario; público sin email/contadores salvo que seas vos mismo o ADMIN.
     @GetMapping("/{userId}")
     public ResponseEntity<UserResponseDTO> getUserById(
             @PathVariable Long userId,
@@ -49,6 +52,7 @@ public class UsersController {
         return ResponseEntity.ok(userService.getUserById(userId, currentUser));
     }
 
+    // Lista todos los usuarios; solo ADMIN.
     @GetMapping
     public ResponseEntity<Page<UserResponseDTO>> getUsers(
             @RequestParam(required = false) Integer page,
@@ -61,6 +65,7 @@ public class UsersController {
         return ResponseEntity.ok(userService.getUsers(currentUser, pageRequest));
     }
 
+    // Asigna CLIENTE/ADMIN a otro usuario; solo ADMIN, y no te podés cambiar tu propio rol.
     @PatchMapping("/{userId}/role")
     public ResponseEntity<UserResponseDTO> updateRole(
             @PathVariable Long userId,

@@ -29,6 +29,7 @@ public class UserServiceImpl implements UserService {
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
 
+    // Mi perfil completo + contadores. El usuario sale del token, no de la URL.
     @Override
     @Transactional(readOnly = true)
     public UserResponseDTO getMyProfile(User currentUser) {
@@ -37,6 +38,7 @@ public class UserServiceImpl implements UserService {
         return toResponse(user, true);
     }
 
+    // Edita mi nombre/apellido.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public UserResponseDTO updateMyProfile(User currentUser, UserUpdateDTO request) throws BadRequestException {
@@ -61,6 +63,7 @@ public class UserServiceImpl implements UserService {
         return toResponse(userRepository.save(user), true);
     }
 
+    // Perfil de otro usuario; datos completos solo si sos vos mismo o ADMIN.
     @Override
     @Transactional(readOnly = true)
     public UserResponseDTO getUserById(Long userId, User requester) throws ResourceNotFoundException {
@@ -70,6 +73,7 @@ public class UserServiceImpl implements UserService {
         return toResponse(user, full);
     }
 
+    // Lista todos los usuarios; solo ADMIN.
     @Override
     @Transactional(readOnly = true)
     public Page<UserResponseDTO> getUsers(User requester, Pageable pageable) throws ForbiddenException {
@@ -79,6 +83,7 @@ public class UserServiceImpl implements UserService {
         return userRepository.findAll(pageable).map(user -> toResponse(user, true));
     }
 
+    // Asigna un rol nuevo; solo ADMIN, y no se puede auto-asignar (evita quedarse sin acceso).
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public UserResponseDTO updateRole(Long userId, String role, User requester)
@@ -87,7 +92,6 @@ public class UserServiceImpl implements UserService {
             throw new ForbiddenException();
         }
         if (requester.getId().equals(userId)) {
-            // Un ADMIN no puede cambiarse el rol a si mismo (evita quedarse sin acceso).
             throw new ForbiddenException();
         }
 
@@ -122,6 +126,7 @@ public class UserServiceImpl implements UserService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    // Arma el DTO; includePrivate agrega email y contadores (solo para el dueño o ADMIN).
     private UserResponseDTO toResponse(User user, boolean includePrivate) {
         UserResponseDTO.UserResponseDTOBuilder builder = UserResponseDTO.builder()
                 .id(user.getId())

@@ -31,6 +31,7 @@ public class OrdersController {
 
     private final OrderService orderService;
 
+    // Mis órdenes (ADMIN ve todas).
     @GetMapping
     public ResponseEntity<Page<OrderResponseDTO>> getOrders(
             @RequestParam(required = false) Integer page,
@@ -43,6 +44,7 @@ public class OrdersController {
         return ResponseEntity.ok(orderService.getOrders(user, pageRequest));
     }
 
+    // Una orden puntual; solo la ve el dueño o un ADMIN.
     @GetMapping("/{orderId}")
     public ResponseEntity<OrderResponseDTO> getOrderById(
             @PathVariable Long orderId,
@@ -50,6 +52,8 @@ public class OrdersController {
         return ResponseEntity.ok(orderService.getOrderById(orderId, user));
     }
 
+    // Confirma el carrito del usuario logueado: valida cupos, aplica cupón si viene, genera los
+    // vouchers (Booking) y vacía el carrito, todo en una transacción.
     @PostMapping
     public ResponseEntity<OrderResponseDTO> createOrder(
             @RequestBody(required = false) OrderRequestDTO request,

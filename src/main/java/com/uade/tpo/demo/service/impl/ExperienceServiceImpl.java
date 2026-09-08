@@ -1,10 +1,23 @@
 package com.uade.tpo.demo.service.impl;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.List;
+
+import javax.imageio.IIOImage;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageOutputStream;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,16 +49,23 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class ExperienceServiceImpl implements ExperienceService {
 
+    // Lado mas largo permitido para una foto de experiencia, en pixeles.
+    private static final int IMAGE_MAX_DIMENSION = 1600;
+    // Calidad JPEG (0 a 1) usada al recomprimir las fotos subidas.
+    private static final float IMAGE_JPEG_QUALITY = 0.75f;
+
     private final ExperienceRepository experienceRepository;
     private final ExperienceCategoryRepository experienceCategoryRepository;
     private final UserRepository userRepository;
 
+    // Lista todas las experiencias sin filtrar.
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> getExperiences(Pageable pageable) {
         return experienceRepository.findAll(pageable).map(this::toResponse);
     }
 
+    // Busca experiencias combinando filtros opcionales (categoría, precio, ubicación, fechas, etc).
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
@@ -70,12 +90,14 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .map(this::toResponse);
     }
 
+    // Una experiencia puntual por id.
     @Override
     @Transactional(readOnly = true)
     public ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException {
         return toResponse(findExperience(experienceId));
     }
 
+    // Crea una experiencia nueva; exige al menos 1 foto y un título que no se repita para el mismo vendedor.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceResponseDTO createExperience(ExperienceRequestDTO request, List<MultipartFile> images,
@@ -92,8 +114,13 @@ public class ExperienceServiceImpl implements ExperienceService {
         ExperienceCategory category = experienceCategoryRepository.findById(request.getCategoryId())
                 .orElseThrow(ResourceNotFoundException::new);
 
+        String title = request.getTitle().trim();
+        if (experienceRepository.existsByPublisherIdAndTitleIgnoreCase(publisherId, title)) {
+            throw new BadRequestException();
+        }
+
         Experience experience = Experience.builder()
-                .title(request.getTitle().trim())
+                .title(title)
                 .description(trimToNull(request.getDescription()))
                 .price(request.getPrice())
                 .location(trimToNull(request.getLocation()))
@@ -106,6 +133,8 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
+    // Actualiza una experiencia existente; solo el dueño o un ADMIN. Si vienen fotos nuevas,
+    // reemplaza todo el set (orphanRemoval borra las viejas).
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceResponseDTO updateExperience(Long experienceId, ExperienceRequestDTO request,
@@ -121,14 +150,19 @@ public class ExperienceServiceImpl implements ExperienceService {
             experience.setCategory(category);
         }
 
-        experience.setTitle(request.getTitle().trim());
+        String title = request.getTitle().trim();
+        Long publisherId = experience.getPublisher() != null ? experience.getPublisher().getId() : null;
+        if (publisherId != null
+                && experienceRepository.existsByPublisherIdAndTitleIgnoreCaseAndIdNot(publisherId, title, experienceId)) {
+            throw new BadRequestException();
+        }
+        experience.setTitle(title);
         experience.setDescription(trimToNull(request.getDescription()));
         experience.setPrice(request.getPrice());
         experience.setLocation(trimToNull(request.getLocation()));
 
         List<MultipartFile> validImages = nonEmptyImages(images);
         if (!validImages.isEmpty()) {
-            // Reemplaza el set completo de fotos (orphanRemoval borra las viejas).
             if (experience.getImages() != null) {
                 experience.getImages().clear();
             } else {
@@ -140,6 +174,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
+    // Cambia el descuento de la experiencia (0 <= x < 100). Solo el dueño o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceResponseDTO updateDiscount(Long experienceId, BigDecimal discountPercentage, User currentUser)
@@ -159,6 +194,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
+    // Borra una experiencia; falla si tiene sesiones asociadas. Solo el dueño o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteExperience(Long experienceId, User currentUser)
@@ -222,18 +258,65 @@ public class ExperienceServiceImpl implements ExperienceService {
         return result;
     }
 
+    // Convierte los archivos subidos en entidades ExperienceImage, comprimiendo cada una.
     private List<ExperienceImage> toImageEntities(List<MultipartFile> images, Experience experience)
             throws IOException {
         List<ExperienceImage> result = new ArrayList<>();
         int position = 0;
         for (MultipartFile image : images) {
             result.add(ExperienceImage.builder()
-                    .image(image.getBytes())
+                    .image(compressImage(image.getBytes()))
                     .position(position++)
                     .experience(experience)
                     .build());
         }
         return result;
+    }
+
+    // Redimensiona y recomprime a JPEG antes de guardar como BLOB, así las fotos de celular no
+    // inflan la tabla ni la respuesta en base64. Si no se puede decodificar, guarda el original.
+    private byte[] compressImage(byte[] original) {
+        try {
+            BufferedImage source = ImageIO.read(new ByteArrayInputStream(original));
+            if (source == null) {
+                return original;
+            }
+
+            int width = source.getWidth();
+            int height = source.getHeight();
+            double scale = Math.min(1.0, (double) IMAGE_MAX_DIMENSION / Math.max(width, height));
+            int targetWidth = Math.max(1, (int) Math.round(width * scale));
+            int targetHeight = Math.max(1, (int) Math.round(height * scale));
+
+            BufferedImage target = new BufferedImage(targetWidth, targetHeight, BufferedImage.TYPE_INT_RGB);
+            Graphics2D g = target.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.drawImage(source, 0, 0, targetWidth, targetHeight, Color.WHITE, null);
+            g.dispose();
+
+            Iterator<ImageWriter> writers = ImageIO.getImageWritersByFormatName("jpg");
+            if (!writers.hasNext()) {
+                return original;
+            }
+            ImageWriter writer = writers.next();
+            ImageWriteParam params = writer.getDefaultWriteParam();
+            params.setCompressionMode(ImageWriteParam.MODE_EXPLICIT);
+            params.setCompressionQuality(IMAGE_JPEG_QUALITY);
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try (ImageOutputStream ios = ImageIO.createImageOutputStream(out)) {
+                writer.setOutput(ios);
+                writer.write(null, new IIOImage(target, null, null), params);
+            } finally {
+                writer.dispose();
+            }
+
+            byte[] compressed = out.toByteArray();
+            return compressed.length < original.length ? compressed : original;
+        } catch (IOException e) {
+            return original;
+        }
     }
 
     private String trimToNull(String value) {
@@ -244,6 +327,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
+    // Arma el DTO de respuesta, incluyendo rating promedio y fotos en base64.
     private ExperienceResponseDTO toResponse(Experience experience) {
         List<Review> reviews = experience.getReviews();
         int reviewCount = reviews != null ? reviews.size() : 0;

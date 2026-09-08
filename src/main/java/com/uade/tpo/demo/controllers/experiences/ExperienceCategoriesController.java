@@ -31,6 +31,7 @@ public class ExperienceCategoriesController {
 
     private final ExperienceCategoryService experienceCategoryService;
 
+    // Lista todas las categorías; sin page/size trae todo.
     @GetMapping
     public ResponseEntity<Page<ExperienceCategoryResponseDTO>> getCategories(
             @RequestParam(required = false) Integer page,
@@ -40,12 +41,14 @@ public class ExperienceCategoriesController {
         return ResponseEntity.ok(experienceCategoryService.getCategories(PageRequest.of(page, size)));
     }
 
+    // Una categoría puntual por id.
     @GetMapping("/{categoryId}")
     public ResponseEntity<ExperienceCategoryResponseDTO> getCategoryById(@PathVariable Long categoryId)
             throws ResourceNotFoundException {
         return ResponseEntity.ok(experienceCategoryService.getCategoryById(categoryId));
     }
 
+    // Crea una categoría nueva (nombre único).
     @PostMapping
     public ResponseEntity<ExperienceCategoryResponseDTO> createCategory(
             @RequestBody ExperienceCategoryRequestDTO request)
@@ -54,6 +57,7 @@ public class ExperienceCategoriesController {
         return ResponseEntity.created(URI.create("/experience-categories/" + result.getId())).body(result);
     }
 
+    // Actualiza nombre/descripción de una categoría existente.
     @PutMapping("/{categoryId}")
     public ResponseEntity<ExperienceCategoryResponseDTO> updateCategory(
             @PathVariable Long categoryId,
@@ -62,6 +66,7 @@ public class ExperienceCategoriesController {
         return ResponseEntity.ok(experienceCategoryService.updateCategory(categoryId, request));
     }
 
+    // Borra una categoría; falla si todavía tiene experiencias asociadas.
     @DeleteMapping("/{categoryId}")
     public ResponseEntity<Void> deleteCategory(@PathVariable Long categoryId)
             throws ResourceNotFoundException, BadRequestException {

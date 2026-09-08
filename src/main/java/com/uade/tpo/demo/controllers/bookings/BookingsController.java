@@ -25,7 +25,7 @@ public class BookingsController {
 
     private final BookingService bookingService;
 
-    /** Vouchers/reservas que hizo el usuario autenticado (ADMIN ve todos). */
+    // Mis vouchers (los que reservé yo). Si soy ADMIN, veo los de todos.
     @GetMapping
     public ResponseEntity<Page<BookingResponseDTO>> getBookings(
             @RequestParam(required = false) Integer page,
@@ -34,7 +34,7 @@ public class BookingsController {
         return ResponseEntity.ok(bookingService.getBookings(user, pageRequest(page, size)));
     }
 
-    /** Vista de vendedor: reservas sobre las experiencias que publico el usuario. */
+    // Vista vendedor: quién reservó en las experiencias que yo publiqué.
     @GetMapping("/sales")
     public ResponseEntity<Page<BookingResponseDTO>> getSales(
             @RequestParam(required = false) Integer page,
@@ -43,7 +43,7 @@ public class BookingsController {
         return ResponseEntity.ok(bookingService.getSales(user, pageRequest(page, size)));
     }
 
-    /** Reservas de una experiencia puntual. Solo el dueño de la experiencia o un ADMIN. */
+    // Reservas de una experiencia puntual; solo la puede ver el dueño de esa experiencia o un ADMIN.
     @GetMapping("/experience/{experienceId}")
     public ResponseEntity<Page<BookingResponseDTO>> getBookingsByExperience(
             @PathVariable Long experienceId,
@@ -54,6 +54,7 @@ public class BookingsController {
                 bookingService.getBookingsByExperience(experienceId, user, pageRequest(page, size)));
     }
 
+    // Un voucher puntual: lo puede ver el comprador, el vendedor de esa experiencia, o un ADMIN.
     @GetMapping("/{bookingId}")
     public ResponseEntity<BookingResponseDTO> getBookingById(
             @PathVariable Long bookingId,

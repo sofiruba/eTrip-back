@@ -36,7 +36,6 @@ public class JwtService {
                 // id del usuario, para que un cliente (front, Insomnia) lo pueda leer
                 // del token sin tener que pegarle a /users/me aparte.
                 .claim("id", user.getId())
-                .claim("Gisele", 1234567)
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(getSecretKey())
                 .compact();

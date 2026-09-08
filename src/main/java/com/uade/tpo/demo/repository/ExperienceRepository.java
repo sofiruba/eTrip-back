@@ -18,4 +18,8 @@ public interface ExperienceRepository
     Page<Experience> findByCategoryIdAndTitleContainingIgnoreCase(Long categoryId, String title, Pageable pageable);
 
     long countByPublisherId(Long publisherId);
+
+    boolean existsByPublisherIdAndTitleIgnoreCase(Long publisherId, String title);
+
+    boolean existsByPublisherIdAndTitleIgnoreCaseAndIdNot(Long publisherId, String title, Long id);
 }

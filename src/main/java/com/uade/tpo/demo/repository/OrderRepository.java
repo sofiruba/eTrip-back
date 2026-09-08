@@ -14,4 +14,6 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     long countByUserId(Long userId);
 
     boolean existsByDiscountCouponId(Long discountCouponId);
+
+    boolean existsByUserIdAndDiscountCouponId(Long userId, Long discountCouponId);
 }

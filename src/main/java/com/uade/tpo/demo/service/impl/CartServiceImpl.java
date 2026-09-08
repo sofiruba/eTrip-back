@@ -35,11 +35,12 @@ public class CartServiceImpl implements CartService {
     private final ExperienceSessionRepository experienceSessionRepository;
     private final UserRepository userRepository;
 
+    // Trae el carrito de un usuario (lo crea vacío si todavía no tiene uno) y calcula el total.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO getCartByUserId(Long userId) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
-            .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(ResourceNotFoundException::new);
 
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -54,19 +55,14 @@ public class CartServiceImpl implements CartService {
         List<CartItemResponseDTO> itemDTOs = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
 
-        // OJO: no usamos cart.getItems() aca. Si el Cart se acaba de crear/tocar en esta misma
-        // transaccion (p. ej. addItem creando el carrito y guardando el primer CartItem), la
-        // colección en memoria de esa instancia de Cart queda vieja/vacía (Hibernate no la
-        // sincroniza sola) y el primer item agregado no aparecía en la respuesta aunque sí
-        // quedaba guardado en la base. Con una query directa por cartId siempre se lee lo que
-        // realmente hay en la base.
+        // Se consulta el repository directo (no cart.getItems()) porque si el Cart se acaba de
+        // crear en esta misma transaccion, la coleccion en memoria queda vieja y no refleja el
+        // item recien guardado.
         List<CartItem> items = cartItemRepository.findByCartId(cart.getId());
 
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
             Experience experience = session.getExperience();
-            // effectivePrice ya contempla el descuento individual del producto (si tiene),
-            // para que el total del carrito coincida con lo que despues cobra el checkout.
             BigDecimal unitPrice = experience.getEffectivePrice();
             BigDecimal itemTotal = unitPrice.multiply(BigDecimal.valueOf(item.getQuantity()));
 
@@ -94,13 +90,14 @@ public class CartServiceImpl implements CartService {
                 .build();
     }
 
+    // Agrega una sesión al carrito (o suma cantidad si ya estaba); valida que haya cupo disponible.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO addItem(CartItemRequestDTO request) throws ResourceNotFoundException, BadRequestException {
-            User user = userRepository.findById(request.getUserId())
-            .orElseThrow(ResourceNotFoundException::new);
+        User user = userRepository.findById(request.getUserId())
+                .orElseThrow(ResourceNotFoundException::new);
 
-    ExperienceSession session = experienceSessionRepository
+        ExperienceSession session = experienceSessionRepository
                 .findById(request.getExperienceSessionId())
                 .orElseThrow(ResourceNotFoundException::new);
 
@@ -152,6 +149,7 @@ public class CartServiceImpl implements CartService {
         return getCartByUserId(user.getId());
     }
 
+    // Cambia la cantidad de un item existente; solo el dueño del carrito.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO updateItemQuantity(Long userId, Long cartItemId, Integer quantity)
@@ -182,33 +180,31 @@ public class CartServiceImpl implements CartService {
         cartItem.setQuantity(quantity);
 
         cartItemRepository.save(cartItem);
-    
-        return getCartByUserId(userId);
 
+        return getCartByUserId(userId);
     }
 
+    // Saca un item puntual del carrito; solo el dueño del carrito.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void removeItem(Long userId, Long cartItemId) throws ResourceNotFoundException, ForbiddenException {
-          User user = userRepository.findById(userId)
-             .orElseThrow(ResourceNotFoundException::new);
+        User user = userRepository.findById(userId)
+                .orElseThrow(ResourceNotFoundException::new);
 
         CartItem cartItem = cartItemRepository.findById(cartItemId)
-             .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(ResourceNotFoundException::new);
 
         if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
-            // Antes tiraba IllegalArgumentException (sin @ResponseStatus -> 500). El resto del
-            // proyecto usa ForbiddenException para "esto no es tuyo" -> 403.
             throw new ForbiddenException();
         }
 
         cartItemRepository.delete(cartItem);
     }
 
+    // Vacía el carrito entero.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void clearCart(Long userId) throws ResourceNotFoundException {
-
         User user = userRepository.findById(userId)
                 .orElseThrow(ResourceNotFoundException::new);
 

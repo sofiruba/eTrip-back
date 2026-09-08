@@ -11,14 +11,19 @@ import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
 public interface UserService {
+    // Mi perfil completo + contadores.
     UserResponseDTO getMyProfile(User currentUser);
 
+    // Edita mis datos de perfil.
     UserResponseDTO updateMyProfile(User currentUser, UserUpdateDTO request) throws BadRequestException;
 
+    // Perfil de otro usuario; datos completos solo si sos vos mismo o ADMIN.
     UserResponseDTO getUserById(Long userId, User requester) throws ResourceNotFoundException;
 
+    // Lista todos los usuarios; solo ADMIN.
     Page<UserResponseDTO> getUsers(User requester, Pageable pageable) throws ForbiddenException;
 
+    // Asigna un rol nuevo; solo ADMIN.
     UserResponseDTO updateRole(Long userId, String role, User requester)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 }

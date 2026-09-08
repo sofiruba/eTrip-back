@@ -31,8 +31,8 @@ public class CartsController {
 
     private final CartService cartService;
 
+    // Solo el dueño del carrito o un ADMIN puede operar sobre él.
     private void validateUserAccess(User authenticatedUser, Long userId) {
-
         boolean isAdmin = authenticatedUser.getRole() == Role.ADMIN;
         boolean isOwner = authenticatedUser.getId().equals(userId);
 
@@ -42,22 +42,29 @@ public class CartsController {
             );
         }
     }
+
+    // Trae el carrito de un usuario (lo crea vacío si todavía no tiene uno).
     @GetMapping("/user/{userId}")
     public ResponseEntity<CartResponseDTO> getCartByUserId(@PathVariable Long userId, @AuthenticationPrincipal User authenticatedUser)
             throws ResourceNotFoundException {
-                validateUserAccess(authenticatedUser, userId);
-                CartResponseDTO cart = cartService.getCartByUserId(userId);
-                return ResponseEntity.ok(cart);
+        validateUserAccess(authenticatedUser, userId);
+        CartResponseDTO cart = cartService.getCartByUserId(userId);
+        return ResponseEntity.ok(cart);
     }
 
+    // Agrega una sesión al carrito. userId es opcional: si no lo mandás, se usa el usuario del token.
     @PostMapping("/items")
     public ResponseEntity<CartResponseDTO> addItem(@RequestBody CartItemRequestDTO request, @AuthenticationPrincipal User authenticatedUser)
             throws ResourceNotFoundException, BadRequestException {
-                validateUserAccess(authenticatedUser, request.getUserId());
-                CartResponseDTO cart = cartService.addItem(request);
-                return ResponseEntity.ok(cart);
+        if (request.getUserId() == null) {
+            request.setUserId(authenticatedUser.getId());
+        }
+        validateUserAccess(authenticatedUser, request.getUserId());
+        CartResponseDTO cart = cartService.addItem(request);
+        return ResponseEntity.ok(cart);
     }
 
+    // Cambia la cantidad de un item ya agregado al carrito.
     @PatchMapping("/user/{userId}/items/{cartItemId}")
     public ResponseEntity<CartResponseDTO> updateItemQuantity(
             @PathVariable Long userId,
@@ -70,27 +77,26 @@ public class CartsController {
         return ResponseEntity.ok(cart);
     }
 
+    // Saca un item puntual del carrito.
     @DeleteMapping("/user/{userId}/items/{cartItemId}")
     public ResponseEntity<Void> removeItem(
             @PathVariable Long userId,
             @PathVariable Long cartItemId,
             @AuthenticationPrincipal User authenticatedUser)
             throws ResourceNotFoundException, ForbiddenException {
-                validateUserAccess(authenticatedUser, userId);
-                cartService.removeItem(userId, cartItemId);
-                return ResponseEntity.noContent().build();
+        validateUserAccess(authenticatedUser, userId);
+        cartService.removeItem(userId, cartItemId);
+        return ResponseEntity.noContent().build();
     }
 
-   @DeleteMapping("/user/{userId}")
+    // Vacía el carrito entero.
+    @DeleteMapping("/user/{userId}")
     public ResponseEntity<Void> clearCart(
             @PathVariable Long userId,
             @AuthenticationPrincipal User authenticatedUser)
             throws ResourceNotFoundException {
-
         validateUserAccess(authenticatedUser, userId);
-
         cartService.clearCart(userId);
-
         return ResponseEntity.noContent().build();
     }
 }

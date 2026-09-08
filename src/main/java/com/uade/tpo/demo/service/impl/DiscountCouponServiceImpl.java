@@ -28,19 +28,22 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
     private final DiscountCouponRepository discountCouponRepository;
     private final OrderRepository orderRepository;
 
+    // Lista todos los cupones (activos e inactivos).
     @Override
     @Transactional(readOnly = true)
     public Page<DiscountCouponResponseDTO> getCoupons(Pageable pageable) {
         return discountCouponRepository.findAll(pageable).map(this::toResponse);
     }
 
+    // Un cupón puntual por id.
     @Override
     @Transactional(readOnly = true)
     public DiscountCouponResponseDTO getCouponById(Long couponId) throws ResourceNotFoundException {
         return toResponse(discountCouponRepository.findById(couponId)
-                .orElseThrow(ResourceNotFoundException::new));
+                .orElseThrow(() -> new ResourceNotFoundException("No existe un cupon con id " + couponId)));
     }
 
+    // Chequea si un código es aplicable hoy (existe, activo, vigente); no lo gasta ni lo modifica.
     @Override
     @Transactional(readOnly = true)
     public CouponValidationDTO validateCoupon(String code) {
@@ -56,7 +59,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
                 .build();
     }
 
-    /** Devuelve null si el cupon es aplicable hoy, o un codigo de motivo si no. */
+    // Devuelve null si el cupón es aplicable hoy, o un código de motivo si no.
     static String reasonIfInvalid(DiscountCoupon coupon) {
         if (coupon == null) {
             return "NOT_FOUND";
@@ -77,6 +80,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
         return null;
     }
 
+    // Crea un cupón nuevo (código único, porcentaje entre 0 y 100, rango de vigencia válido).
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public DiscountCouponResponseDTO createCoupon(DiscountCouponRequestDTO request) throws BadRequestException {
@@ -103,6 +107,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
         return toResponse(discountCouponRepository.save(coupon));
     }
 
+    // Actualiza los campos que vengan informados de un cupón existente.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public DiscountCouponResponseDTO updateCoupon(Long couponId, DiscountCouponRequestDTO request)
@@ -140,14 +145,14 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
         return toResponse(discountCouponRepository.save(coupon));
     }
 
+    // Borra el cupón si nunca se usó; si ya se usó en una orden, lo desactiva en vez de
+    // borrarlo, para no perder la integridad histórica de esas órdenes.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteCoupon(Long couponId) throws ResourceNotFoundException {
         DiscountCoupon coupon = discountCouponRepository.findById(couponId)
                 .orElseThrow(ResourceNotFoundException::new);
 
-        // Si el cupon ya fue usado en alguna reserva no se borra: se desactiva para
-        // conservar la integridad historica de esas ordenes.
         if (orderRepository.existsByDiscountCouponId(couponId)) {
             coupon.setActive(false);
             discountCouponRepository.save(coupon);

@@ -18,12 +18,14 @@ public class AuthenticationController {
 
     private final AuthenticationService service;
 
+    // Crea un usuario nuevo (rol CLIENTE por defecto) y devuelve el token de una vez.
     @PostMapping("/register")
     public ResponseEntity<AuthenticationResponse> register(
             @RequestBody RegisterRequest request) throws BadRequestException {
         return ResponseEntity.ok(service.register(request));
     }
 
+    // Login con email o username + password, devuelve el token JWT.
     @PostMapping("/authenticate")
     public ResponseEntity<AuthenticationResponse> authenticate(
             @RequestBody AuthenticationRequest request) {

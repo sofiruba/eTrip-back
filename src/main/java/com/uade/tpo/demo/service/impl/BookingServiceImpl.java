@@ -27,6 +27,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final ExperienceRepository experienceRepository;
 
+    // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
     @Transactional(readOnly = true)
     public Page<BookingResponseDTO> getBookings(User user, Pageable pageable) {
@@ -36,6 +37,7 @@ public class BookingServiceImpl implements BookingService {
         return bookings.map(this::toResponse);
     }
 
+    // Vista vendedor: reservas hechas sobre experiencias que publicó este usuario.
     @Override
     @Transactional(readOnly = true)
     public Page<BookingResponseDTO> getSales(User seller, Pageable pageable) {
@@ -43,6 +45,7 @@ public class BookingServiceImpl implements BookingService {
                 .map(this::toResponse);
     }
 
+    // Reservas de una experiencia puntual; solo el dueño de esa experiencia o un ADMIN.
     @Override
     @Transactional(readOnly = true)
     public Page<BookingResponseDTO> getBookingsByExperience(Long experienceId, User requester, Pageable pageable)
@@ -60,6 +63,7 @@ public class BookingServiceImpl implements BookingService {
                 .map(this::toResponse);
     }
 
+    // Un voucher puntual: lo ve el comprador, el vendedor de la experiencia, o un ADMIN.
     @Override
     @Transactional(readOnly = true)
     public BookingResponseDTO getBookingById(Long bookingId, User user)
@@ -68,16 +72,19 @@ public class BookingServiceImpl implements BookingService {
                 .orElseThrow(ResourceNotFoundException::new);
 
         Order order = booking.getOrder();
+        // El comprador es el usuario que hizo la orden asociada a la reserva.
         boolean isBuyer = order != null
                 && order.getUser() != null
                 && order.getUser().getId().equals(user.getId());
 
+        // El vendedor es el usuario que publicó la experiencia asociada a la sesión de la reserva.
         ExperienceSession session = booking.getExperienceSession();
         boolean isSeller = session != null
                 && session.getExperience() != null
                 && session.getExperience().getPublisher() != null
                 && session.getExperience().getPublisher().getId().equals(user.getId());
 
+        // Solo el comprador, el vendedor o un ADMIN pueden ver la reserva.
         if (!isBuyer && !isSeller && !isAdmin(user)) {
             throw new ForbiddenException();
         }

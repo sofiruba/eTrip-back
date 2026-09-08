@@ -31,6 +31,7 @@ public class DiscountCouponsController {
 
     private final DiscountCouponService discountCouponService;
 
+    // Lista todos los cupones (activos e inactivos).
     @GetMapping
     public ResponseEntity<Page<DiscountCouponResponseDTO>> getCoupons(
             @RequestParam(required = false) Integer page,
@@ -42,18 +43,20 @@ public class DiscountCouponsController {
         return ResponseEntity.ok(discountCouponService.getCoupons(pageRequest));
     }
 
-    /** Chequea si un codigo de cupon es aplicable hoy. Siempre 200 (valid true/false + reason). */
+    // Chequea si un código de cupón es aplicable hoy. Siempre responde 200 (valid true/false + motivo).
     @GetMapping("/validate")
     public ResponseEntity<CouponValidationDTO> validateCoupon(@RequestParam String code) {
         return ResponseEntity.ok(discountCouponService.validateCoupon(code));
     }
 
+    // Un cupón puntual por id.
     @GetMapping("/{couponId}")
     public ResponseEntity<DiscountCouponResponseDTO> getCouponById(@PathVariable Long couponId)
             throws ResourceNotFoundException {
         return ResponseEntity.ok(discountCouponService.getCouponById(couponId));
     }
 
+    // Crea un cupón nuevo (código único, porcentaje y vigencia).
     @PostMapping
     public ResponseEntity<DiscountCouponResponseDTO> createCoupon(@RequestBody DiscountCouponRequestDTO request)
             throws BadRequestException {
@@ -61,6 +64,7 @@ public class DiscountCouponsController {
         return ResponseEntity.created(URI.create("/discount-coupons/" + result.getId())).body(result);
     }
 
+    // Actualiza los datos de un cupón existente.
     @PutMapping("/{couponId}")
     public ResponseEntity<DiscountCouponResponseDTO> updateCoupon(
             @PathVariable Long couponId,
@@ -68,6 +72,7 @@ public class DiscountCouponsController {
         return ResponseEntity.ok(discountCouponService.updateCoupon(couponId, request));
     }
 
+    // Borra el cupón si nunca se usó; si ya se usó en una orden, lo desactiva en vez de borrarlo.
     @DeleteMapping("/{couponId}")
     public ResponseEntity<Void> deleteCoupon(@PathVariable Long couponId) throws ResourceNotFoundException {
         discountCouponService.deleteCoupon(couponId);

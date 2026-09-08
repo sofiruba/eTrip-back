@@ -48,6 +48,7 @@ public class OrderServiceImpl implements OrderService {
     private final BookingRepository bookingRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
 
+    // Mis órdenes; ADMIN ve las de todos.
     @Override
     @Transactional(readOnly = true)
     public Page<OrderResponseDTO> getOrders(User user, Pageable pageable) {
@@ -57,6 +58,7 @@ public class OrderServiceImpl implements OrderService {
         return orders.map(this::toResponse);
     }
 
+    // Una orden puntual; solo el dueño o un ADMIN.
     @Override
     @Transactional(readOnly = true)
     public OrderResponseDTO getOrderById(Long orderId, User user)
@@ -72,6 +74,8 @@ public class OrderServiceImpl implements OrderService {
         return toResponse(order);
     }
 
+    // Confirma el carrito del usuario: valida cupos, aplica cupón si viene, genera un Booking
+    // (voucher) por cada item, descuenta los cupos y vacía el carrito, todo en una transacción.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public OrderResponseDTO createOrder(User user, OrderRequestDTO request)
@@ -93,14 +97,13 @@ public class OrderServiceImpl implements OrderService {
                 throw new BadRequestException();
             }
             Experience experience = session.getExperience();
-            // effectivePrice ya contempla el descuento individual del producto (si tiene).
             BigDecimal unitPrice = experience != null && experience.getEffectivePrice() != null
                     ? experience.getEffectivePrice()
                     : BigDecimal.ZERO;
             subtotal = subtotal.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
-        DiscountCoupon coupon = resolveCoupon(request);
+        DiscountCoupon coupon = resolveCoupon(request, user);
         BigDecimal discountAmount = BigDecimal.ZERO;
         if (coupon != null) {
             discountAmount = subtotal
@@ -143,7 +146,9 @@ public class OrderServiceImpl implements OrderService {
         return toResponse(order);
     }
 
-    private DiscountCoupon resolveCoupon(OrderRequestDTO request)
+    // Busca y valida el cupón del request (mismo criterio que GET /discount-coupons/validate),
+    // y que este usuario no lo haya usado ya en una orden anterior.
+    private DiscountCoupon resolveCoupon(OrderRequestDTO request, User user)
             throws ResourceNotFoundException, BadRequestException {
         if (request == null || request.getCouponCode() == null || request.getCouponCode().isBlank()) {
             return null;
@@ -153,14 +158,18 @@ public class OrderServiceImpl implements OrderService {
                 .findByCode(request.getCouponCode().trim().toUpperCase())
                 .orElseThrow(ResourceNotFoundException::new);
 
-        // Mismo criterio de validez que GET /discount-coupons/validate.
         if (DiscountCouponServiceImpl.reasonIfInvalid(coupon) != null) {
+            throw new BadRequestException();
+        }
+
+        if (orderRepository.existsByUserIdAndDiscountCouponId(user.getId(), coupon.getId())) {
             throw new BadRequestException();
         }
 
         return coupon;
     }
 
+    // Genera el código de voucher visible del Booking (ej. ETRIP-A1B2C3D4).
     private String generateVoucherCode() {
         return "ETRIP-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
     }
@@ -179,6 +188,7 @@ public class OrderServiceImpl implements OrderService {
         return name.isEmpty() ? user.getEmail() : name;
     }
 
+    // Arma el DTO de la orden junto con los vouchers (Bookings) que generó.
     private OrderResponseDTO toResponse(Order order) {
         List<BookingResponseDTO> bookingDtos = new ArrayList<>();
         List<Booking> bookings = order.getBookings();

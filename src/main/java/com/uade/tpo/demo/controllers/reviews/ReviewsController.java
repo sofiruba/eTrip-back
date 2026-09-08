@@ -32,17 +32,21 @@ public class ReviewsController {
 
     private final ReviewService reviewService;
 
+    // Listado general de reseñas: CLIENTE ve solo las propias, ADMIN ve todas. Para las de un
+    // producto puntual (públicas) usar /reviews/experience/{id}.
     @GetMapping
     public ResponseEntity<Page<ReviewResponseDTO>> getReviews(
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) {
-        if (page == null || size == null) {
-            return ResponseEntity.ok(reviewService.getReviews(PageRequest.of(0, Integer.MAX_VALUE)));
-        }
+            @RequestParam(required = false) Integer size,
+            @AuthenticationPrincipal User currentUser) {
+        PageRequest pageRequest = page == null || size == null
+                ? PageRequest.of(0, Integer.MAX_VALUE)
+                : PageRequest.of(page, size);
 
-        return ResponseEntity.ok(reviewService.getReviews(PageRequest.of(page, size)));
+        return ResponseEntity.ok(reviewService.getReviews(currentUser, pageRequest));
     }
 
+    // Reseñas de una experiencia puntual; siempre públicas (prueba social para cualquiera).
     @GetMapping("/experience/{experienceId}")
     public ResponseEntity<Page<ReviewResponseDTO>> getReviewsByExperience(
             @PathVariable Long experienceId,
@@ -55,6 +59,7 @@ public class ReviewsController {
         return ResponseEntity.ok(reviewService.getReviewsByExperience(experienceId, pageRequest));
     }
 
+    // Mis reseñas.
     @GetMapping("/mine")
     public ResponseEntity<Page<ReviewResponseDTO>> getMyReviews(
             @RequestParam(required = false) Integer page,
@@ -67,12 +72,15 @@ public class ReviewsController {
         return ResponseEntity.ok(reviewService.getMyReviews(currentUser, pageRequest));
     }
 
+    // Una reseña puntual; solo la ve el autor o un ADMIN.
     @GetMapping("/{reviewId}")
-    public ResponseEntity<ReviewResponseDTO> getReviewById(@PathVariable Long reviewId)
-            throws ResourceNotFoundException {
-        return ResponseEntity.ok(reviewService.getReviewById(reviewId));
+    public ResponseEntity<ReviewResponseDTO> getReviewById(
+            @PathVariable Long reviewId,
+            @AuthenticationPrincipal User currentUser) throws ResourceNotFoundException, ForbiddenException {
+        return ResponseEntity.ok(reviewService.getReviewById(reviewId, currentUser));
     }
 
+    // Crea una reseña; una por usuario y experiencia. El autor sale del token, no del body.
     @PostMapping
     public ResponseEntity<ReviewResponseDTO> createReview(
             @RequestBody ReviewRequestDTO request,
@@ -81,6 +89,7 @@ public class ReviewsController {
         return ResponseEntity.created(URI.create("/reviews/" + result.getId())).body(result);
     }
 
+    // Borra una reseña; solo el autor o un ADMIN.
     @DeleteMapping("/{reviewId}")
     public ResponseEntity<Void> deleteReview(
             @PathVariable Long reviewId,

@@ -16,6 +16,7 @@ import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.service.ReviewService;
@@ -28,13 +29,19 @@ public class ReviewServiceImpl implements ReviewService {
 
     private final ReviewRepository reviewRepository;
     private final ExperienceRepository experienceRepository;
+    private final BookingRepository bookingRepository;
 
+    // Listado general: CLIENTE ve solo las propias, ADMIN ve todas.
     @Override
     @Transactional(readOnly = true)
-    public Page<ReviewResponseDTO> getReviews(Pageable pageable) {
-        return reviewRepository.findAll(pageable).map(this::toResponse);
+    public Page<ReviewResponseDTO> getReviews(User currentUser, Pageable pageable) {
+        if (isAdmin(currentUser)) {
+            return reviewRepository.findAll(pageable).map(this::toResponse);
+        }
+        return reviewRepository.findByUserId(currentUser.getId(), pageable).map(this::toResponse);
     }
 
+    // Reseñas de una experiencia puntual; siempre públicas.
     @Override
     @Transactional(readOnly = true)
     public Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, Pageable pageable)
@@ -46,21 +53,32 @@ public class ReviewServiceImpl implements ReviewService {
         return reviewRepository.findByExperienceId(experienceId, pageable).map(this::toResponse);
     }
 
+    // Mis reseñas.
     @Override
     @Transactional(readOnly = true)
     public Page<ReviewResponseDTO> getMyReviews(User currentUser, Pageable pageable) {
         return reviewRepository.findByUserId(currentUser.getId(), pageable).map(this::toResponse);
     }
 
+    // Una reseña puntual; solo el autor o un ADMIN.
     @Override
     @Transactional(readOnly = true)
-    public ReviewResponseDTO getReviewById(Long reviewId) throws ResourceNotFoundException {
+    public ReviewResponseDTO getReviewById(Long reviewId, User currentUser)
+            throws ResourceNotFoundException, ForbiddenException {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(ResourceNotFoundException::new);
+
+        boolean isOwner = currentUser != null
+                && review.getUser() != null
+                && review.getUser().getId().equals(currentUser.getId());
+        if (!isOwner && !isAdmin(currentUser)) {
+            throw new ForbiddenException();
+        }
 
         return toResponse(review);
     }
 
+    // Crea una reseña; una por usuario y experiencia. El autor sale del token.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ReviewResponseDTO createReview(ReviewRequestDTO request, User currentUser)
@@ -71,6 +89,11 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(ResourceNotFoundException::new);
 
         if (reviewRepository.existsByExperienceIdAndUserId(experience.getId(), currentUser.getId())) {
+            throw new BadRequestException();
+        }
+
+        if (!bookingRepository.existsByOrder_User_IdAndExperienceSession_Experience_Id(
+                currentUser.getId(), experience.getId())) {
             throw new BadRequestException();
         }
 
@@ -85,6 +108,7 @@ public class ReviewServiceImpl implements ReviewService {
         return toResponse(reviewRepository.save(review));
     }
 
+    // Borra una reseña; solo el autor o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteReview(Long reviewId, User currentUser)
@@ -95,13 +119,16 @@ public class ReviewServiceImpl implements ReviewService {
         boolean isOwner = currentUser != null
                 && review.getUser() != null
                 && review.getUser().getId().equals(currentUser.getId());
-        boolean isAdmin = currentUser != null && currentUser.getRole() == Role.ADMIN;
 
-        if (!isOwner && !isAdmin) {
+        if (!isOwner && !isAdmin(currentUser)) {
             throw new ForbiddenException();
         }
 
         reviewRepository.delete(review);
+    }
+
+    private boolean isAdmin(User user) {
+        return user != null && user.getRole() == Role.ADMIN;
     }
 
     private void validateRequest(ReviewRequestDTO request, User currentUser) throws BadRequestException {
