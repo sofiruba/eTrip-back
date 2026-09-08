@@ -55,7 +55,7 @@ public class CartsController {
     // Agrega una sesión al carrito. userId es opcional: si no lo mandás, se usa el usuario del token.
     @PostMapping("/items")
     public ResponseEntity<CartResponseDTO> addItem(@RequestBody CartItemRequestDTO request, @AuthenticationPrincipal User authenticatedUser)
-            throws ResourceNotFoundException, BadRequestException {
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         if (request.getUserId() == null) {
             request.setUserId(authenticatedUser.getId());
         }

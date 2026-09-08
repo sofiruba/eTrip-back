@@ -10,8 +10,9 @@ public interface CartService {
     // Trae el carrito de un usuario (lo crea vacío si no tiene).
     CartResponseDTO getCartByUserId(Long userId) throws ResourceNotFoundException;
 
-    // Agrega una sesión al carrito, validando cupo disponible.
-    CartResponseDTO addItem(CartItemRequestDTO request) throws ResourceNotFoundException, BadRequestException;
+    // Agrega una sesión al carrito, validando cupo disponible. No se puede comprar la propia experiencia.
+    CartResponseDTO addItem(CartItemRequestDTO request)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
     // Cambia la cantidad de un item.
     CartResponseDTO updateItemQuantity(Long userId, Long cartItemId, Integer quantity)

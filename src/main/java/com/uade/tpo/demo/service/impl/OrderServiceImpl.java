@@ -83,6 +83,7 @@ public class OrderServiceImpl implements OrderService {
         Cart cart = cartRepository.findByUserId(user.getId())
                 .orElseThrow(ResourceNotFoundException::new);
 
+         // Valida que el carrito tenga items; si no, lanza excepción.
         List<CartItem> items = cart.getItems() != null
                 ? new ArrayList<>(cart.getItems())
                 : new ArrayList<>();
@@ -90,12 +91,14 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException();
         }
 
+        // Valida que cada item tenga cupos disponibles; si no, lanza excepción.
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
             if (session.getAvailableSeats() == null || session.getAvailableSeats() < item.getQuantity()) {
                 throw new BadRequestException();
             }
+            // Calcula el subtotal sumando el precio unitario de la experiencia por la cantidad del item.
             Experience experience = session.getExperience();
             BigDecimal unitPrice = experience != null && experience.getEffectivePrice() != null
                     ? experience.getEffectivePrice()
@@ -103,6 +106,7 @@ public class OrderServiceImpl implements OrderService {
             subtotal = subtotal.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
+        // Valida y resuelve el cupón del request (si viene) y que este usuario no lo haya usado ya en una orden anterior.
         DiscountCoupon coupon = resolveCoupon(request, user);
         BigDecimal discountAmount = BigDecimal.ZERO;
         if (coupon != null) {
@@ -113,6 +117,7 @@ public class OrderServiceImpl implements OrderService {
         BigDecimal total = subtotal.subtract(discountAmount);
         long totalTickets = items.stream().mapToLong(CartItem::getQuantity).sum();
 
+        // Crea la orden, genera un Booking por cada item, descuenta los cupos de las sesiones y vacía el carrito.
         Order order = Order.builder()
                 .user(user)
                 .discountCoupon(coupon)

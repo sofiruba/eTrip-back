@@ -11,6 +11,7 @@ import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.dtos.response.CartItemResponseDTO;
 import com.uade.tpo.demo.entity.Cart;
 import com.uade.tpo.demo.entity.CartItem;
+import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.dtos.request.CartItemRequestDTO;
 import com.uade.tpo.demo.dtos.response.CartResponseDTO;
@@ -41,6 +42,7 @@ public class CartServiceImpl implements CartService {
     public CartResponseDTO getCartByUserId(Long userId) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
                 .orElseThrow(ResourceNotFoundException::new);
+        // Busca el carrito del usuario; si no existe, lo crea vacío.
 
         Cart cart = cartRepository.findByUserId(userId)
                 .orElseGet(() -> {
@@ -53,13 +55,13 @@ public class CartServiceImpl implements CartService {
                 });
 
         List<CartItemResponseDTO> itemDTOs = new ArrayList<>();
+        // Calcula el total del carrito sumando los subtotales de cada item.
         BigDecimal total = BigDecimal.ZERO;
 
-        // Se consulta el repository directo (no cart.getItems()) porque si el Cart se acaba de
-        // crear en esta misma transaccion, la coleccion en memoria queda vieja y no refleja el
-        // item recien guardado.
         List<CartItem> items = cartItemRepository.findByCartId(cart.getId());
 
+        // Para cada item del carrito, calcula el subtotal (precio unitario * cantidad) 
+        // y lo agrega a la lista de DTOs.
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
             Experience experience = session.getExperience();
@@ -81,6 +83,7 @@ public class CartServiceImpl implements CartService {
             itemDTOs.add(itemDTO);
             total = total.add(itemTotal);
         }
+        // Devuelve el carrito con los items y el total calculado.
 
         return CartResponseDTO.builder()
                 .id(cart.getId())
@@ -93,18 +96,33 @@ public class CartServiceImpl implements CartService {
     // Agrega una sesión al carrito (o suma cantidad si ya estaba); valida que haya cupo disponible.
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public CartResponseDTO addItem(CartItemRequestDTO request) throws ResourceNotFoundException, BadRequestException {
+    public CartResponseDTO addItem(CartItemRequestDTO request)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(ResourceNotFoundException::new);
+
+        // Los ADMIN son para moderación, no compran experiencias.
+        if (user.getRole() == Role.ADMIN) {
+            throw new ForbiddenException("Los administradores no pueden comprar experiencias");
+        }
 
         ExperienceSession session = experienceSessionRepository
                 .findById(request.getExperienceSessionId())
                 .orElseThrow(ResourceNotFoundException::new);
 
+        // Un usuario no puede comprar (agregar al carrito) su propia experiencia.
+        Experience experience = session.getExperience();
+        if (experience != null && experience.getPublisher() != null
+                && experience.getPublisher().getId().equals(user.getId())) {
+            throw new ForbiddenException("No podes comprar tu propia experiencia");
+        }
+
+         // Valida que la cantidad solicitada sea positiva.
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new BadRequestException();
         }
 
+        // Busca el carrito del usuario; si no existe, lo crea vacío.
         Cart cart = cartRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
                     Cart newCart = Cart.builder()
@@ -115,6 +133,7 @@ public class CartServiceImpl implements CartService {
                     return cartRepository.save(newCart);
                 });
 
+        // Busca si ya existe un item en el carrito para la misma sesión de experiencia.
         CartItem cartItem = cartItemRepository
                 .findByCartIdAndExperienceSessionId(
                         cart.getId(),
@@ -124,16 +143,19 @@ public class CartServiceImpl implements CartService {
 
         int newQuantity = request.getQuantity();
 
+        // Si ya existía un item para esa sesión, suma la cantidad solicitada a la existente.
         if (cartItem != null) {
             newQuantity += cartItem.getQuantity();
         }
 
+        // Valida que la cantidad total no supere los cupos disponibles de la sesión.
         if (session.getAvailableSeats() == null
                 || newQuantity > session.getAvailableSeats()) {
 
             throw new BadRequestException();
         }
 
+        // Si no existía, crea un nuevo item; si ya existía, actualiza la cantidad.
         if (cartItem == null) {
             cartItem = CartItem.builder()
                     .cart(cart)
@@ -169,6 +191,7 @@ public class CartServiceImpl implements CartService {
             throw new BadRequestException();
         }
 
+        // Valida que la cantidad solicitada no supere los cupos disponibles de la sesión.
         ExperienceSession session = cartItem.getExperienceSession();
 
         if (session.getAvailableSeats() == null

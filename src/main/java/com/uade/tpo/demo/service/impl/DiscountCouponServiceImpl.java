@@ -88,11 +88,13 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
             throw new BadRequestException();
         }
 
+        // Valida que el código no exista ya (no se permite duplicado).
         String code = requireCode(request.getCode());
         if (discountCouponRepository.findByCode(code).isPresent()) {
             throw new BadRequestException();
         }
 
+        // Valida que el porcentaje sea positivo y menor o igual a 100, y que el rango de vigencia sea válido.
         BigDecimal percentage = requirePercentage(request.getPercentage());
         validateDateRange(request.getValidFrom(), request.getValidUntil());
 
@@ -112,12 +114,14 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
     @Transactional(rollbackFor = Throwable.class)
     public DiscountCouponResponseDTO updateCoupon(Long couponId, DiscountCouponRequestDTO request)
             throws ResourceNotFoundException, BadRequestException {
+                // Busca el cupón existente; si no existe, lanza excepción.
         DiscountCoupon coupon = discountCouponRepository.findById(couponId)
                 .orElseThrow(ResourceNotFoundException::new);
         if (request == null) {
             throw new BadRequestException();
         }
 
+        // Valida y actualiza los campos que vengan informados en el request.
         if (request.getCode() != null) {
             String code = requireCode(request.getCode());
             Optional<DiscountCoupon> sameCode = discountCouponRepository.findByCode(code);
@@ -127,6 +131,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
             coupon.setCode(code);
         }
 
+        // Valida y actualiza el porcentaje, rango de vigencia y estado activo si vienen informados.
         if (request.getPercentage() != null) {
             coupon.setPercentage(requirePercentage(request.getPercentage()));
         }
