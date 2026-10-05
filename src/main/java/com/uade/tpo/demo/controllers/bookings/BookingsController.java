@@ -8,12 +8,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.response.BookingResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.service.BookingService;
 
 import lombok.RequiredArgsConstructor;
@@ -60,6 +62,14 @@ public class BookingsController {
             @PathVariable Long bookingId,
             @AuthenticationPrincipal User user) throws ResourceNotFoundException, ForbiddenException {
         return ResponseEntity.ok(bookingService.getBookingById(bookingId, user));
+    }
+
+    @PostMapping("/{bookingId}/refund")
+    public ResponseEntity<BookingResponseDTO> refundBooking(
+            @PathVariable Long bookingId,
+            @AuthenticationPrincipal User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok(bookingService.refundBooking(bookingId, user));
     }
 
     private PageRequest pageRequest(Integer page, Integer size) {

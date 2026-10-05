@@ -7,6 +7,7 @@ import com.uade.tpo.demo.dtos.response.BookingResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 
 public interface BookingService {
     // Mis vouchers; ADMIN ve los de todos.
@@ -22,4 +23,7 @@ public interface BookingService {
     // Un voucher puntual; lo ve el comprador, el vendedor, o un ADMIN.
     BookingResponseDTO getBookingById(Long bookingId, User user)
             throws ResourceNotFoundException, ForbiddenException;
+
+    BookingResponseDTO refundBooking(Long bookingId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
 }

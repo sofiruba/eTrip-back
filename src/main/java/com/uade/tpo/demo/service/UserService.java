@@ -26,4 +26,7 @@ public interface UserService {
     // Asigna un rol nuevo; solo ADMIN.
     UserResponseDTO updateRole(Long userId, String role, User requester)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
+
+    UserResponseDTO updateStatus(Long userId, boolean active, User requester)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 }

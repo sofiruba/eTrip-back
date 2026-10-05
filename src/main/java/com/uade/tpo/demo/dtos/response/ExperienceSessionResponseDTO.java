@@ -19,4 +19,5 @@ public class ExperienceSessionResponseDTO {
     private LocalDateTime endsAt;
     private Integer capacity;
     private Integer availableSeats;
+    private boolean active;
 }

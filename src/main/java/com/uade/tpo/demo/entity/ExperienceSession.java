@@ -41,6 +41,10 @@ public class ExperienceSession {
     @Column
     private Integer availableSeats;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "experience_id", nullable = false)
     private Experience experience;

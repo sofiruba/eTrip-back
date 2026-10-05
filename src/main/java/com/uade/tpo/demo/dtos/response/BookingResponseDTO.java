@@ -22,6 +22,8 @@ public class BookingResponseDTO {
     private LocalDateTime endsAt;
     private Integer quantity;
     private LocalDateTime createdAt;
+    private boolean refunded;
+    private LocalDateTime refundedAt;
 
     /** Quien hizo la reserva. Util sobre todo para la vista de vendedor (/bookings/sales). */
     private Long buyerId;

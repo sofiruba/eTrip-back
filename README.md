@@ -333,6 +333,18 @@ experiencia antes; autor sale del token.
 - Sin CORS configurado.
 - Sin Swagger/OpenAPI.
 
+## Cambios recientes para el frontend
+
+- Los errores propios responden JSON con `{ "status": 400, "message": "..." }`, con un
+  mensaje específico para cada regla de negocio.
+- `DELETE /experience-sessions/{id}` realiza una baja lógica: la sesión conserva sus
+  reservas históricas, queda `active=false` y deja de aparecer en las búsquedas.
+- `PATCH /users/{id}/status?active=true|false` permite a un ADMIN activar o desactivar
+  usuarios. El usuario desactivado no puede autenticarse.
+- `POST /bookings/{id}/refund` permite al comprador o a un ADMIN solicitar un reembolso
+  total antes del inicio de la sesión. Marca el voucher como `refunded=true`, conserva
+  el historial y devuelve los cupos a la sesión.
+
 **Decisiones de diseño:**
 - Un solo rol de comprador/vendedor (`CLIENTE`), no roles separados.
 - Descuentos en dos niveles: por producto y por cupón global.

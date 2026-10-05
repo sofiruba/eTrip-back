@@ -16,4 +16,5 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
     Page<Booking> findByExperienceSession_Experience_Id(Long experienceId, Pageable pageable);
 
     boolean existsByOrder_User_IdAndExperienceSession_Experience_Id(Long userId, Long experienceId);
+
 }
