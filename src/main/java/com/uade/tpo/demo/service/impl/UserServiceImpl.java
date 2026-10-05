@@ -103,6 +103,23 @@ public class UserServiceImpl implements UserService {
         return toResponse(userRepository.save(user), true);
     }
 
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public UserResponseDTO updateStatus(Long userId, boolean active, User requester)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        if (!isAdmin(requester)) {
+            throw new ForbiddenException("Solo un administrador puede activar o desactivar usuarios");
+        }
+        if (requester.getId().equals(userId)) {
+            throw new ForbiddenException("No podés desactivar tu propio usuario");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario solicitado no existe"));
+        user.setActive(active);
+        return toResponse(userRepository.save(user), true);
+    }
+
     private Role parseRole(String role) throws BadRequestException {
         if (role == null || role.isBlank()) {
             throw new BadRequestException();
@@ -134,6 +151,7 @@ public class UserServiceImpl implements UserService {
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
                 .role(user.getRole() != null ? user.getRole().name() : null)
+                .active(user.isActive())
                 .publishedExperiences(experienceRepository.countByPublisherId(user.getId()));
 
         if (includePrivate) {

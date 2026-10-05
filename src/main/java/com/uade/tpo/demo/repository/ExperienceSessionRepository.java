@@ -15,12 +15,12 @@ public interface ExperienceSessionRepository
         extends JpaRepository<ExperienceSession, Long>, JpaSpecificationExecutor<ExperienceSession> {
     Page<ExperienceSession> findByExperienceId(Long experienceId, Pageable pageable);
 
-    boolean existsByExperienceIdAndStartsAtLessThanAndEndsAtGreaterThan(
+    boolean existsByExperienceIdAndActiveTrueAndStartsAtLessThanAndEndsAtGreaterThan(
             Long experienceId,
             LocalDateTime endsAt,
             LocalDateTime startsAt);
 
-    boolean existsByExperienceIdAndIdNotAndStartsAtLessThanAndEndsAtGreaterThan(
+    boolean existsByExperienceIdAndActiveTrueAndIdNotAndStartsAtLessThanAndEndsAtGreaterThan(
             Long experienceId,
             Long sessionId,
             LocalDateTime endsAt,

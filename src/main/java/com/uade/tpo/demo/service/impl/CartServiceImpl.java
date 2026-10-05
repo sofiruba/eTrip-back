@@ -108,7 +108,11 @@ public class CartServiceImpl implements CartService {
 
         ExperienceSession session = experienceSessionRepository
                 .findById(request.getExperienceSessionId())
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+
+        if (!session.isActive()) {
+            throw new BadRequestException("La sesión seleccionada está inactiva y no se puede agregar al carrito");
+        }
 
         // Un usuario no puede comprar (agregar al carrito) su propia experiencia.
         Experience experience = session.getExperience();
@@ -194,6 +198,9 @@ public class CartServiceImpl implements CartService {
         // Valida que la cantidad solicitada no supere los cupos disponibles de la sesión.
         ExperienceSession session = cartItem.getExperienceSession();
 
+        if (!session.isActive()) {
+            throw new BadRequestException("La sesión seleccionada está inactiva y no se puede actualizar");
+        }
         if (session.getAvailableSeats() == null
                 || quantity > session.getAvailableSeats()) {
 

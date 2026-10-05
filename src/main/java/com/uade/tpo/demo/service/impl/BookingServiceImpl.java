@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.service.impl;
 
+import java.time.LocalDateTime;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -13,9 +15,11 @@ import com.uade.tpo.demo.entity.Order;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
+import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.service.BookingService;
 
 import lombok.RequiredArgsConstructor;
@@ -26,6 +30,7 @@ public class BookingServiceImpl implements BookingService {
 
     private final BookingRepository bookingRepository;
     private final ExperienceRepository experienceRepository;
+    private final ExperienceSessionRepository experienceSessionRepository;
 
     // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
@@ -92,6 +97,38 @@ public class BookingServiceImpl implements BookingService {
         return toResponse(booking);
     }
 
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public BookingResponseDTO refundBooking(Long bookingId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("La reserva solicitada no existe"));
+        Order order = booking.getOrder();
+        boolean isBuyer = order != null && order.getUser() != null
+                && order.getUser().getId().equals(user.getId());
+        if (!isBuyer && !isAdmin(user)) {
+            throw new ForbiddenException("Solo el comprador o un administrador puede solicitar el reembolso");
+        }
+        if (booking.isRefunded()) {
+            throw new BadRequestException("La reserva ya fue reembolsada");
+        }
+
+        ExperienceSession session = booking.getExperienceSession();
+        if (session == null) {
+            throw new BadRequestException("La reserva no tiene una sesión asociada");
+        }
+        if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("No se puede reembolsar una reserva cuya sesión ya comenzó");
+        }
+
+        int availableSeats = session.getAvailableSeats() == null ? 0 : session.getAvailableSeats();
+        session.setAvailableSeats(availableSeats + booking.getQuantity());
+        experienceSessionRepository.save(session);
+        booking.setRefunded(true);
+        booking.setRefundedAt(LocalDateTime.now());
+        return toResponse(bookingRepository.save(booking));
+    }
+
     private boolean isAdmin(User user) {
         return user != null && user.getRole() == Role.ADMIN;
     }
@@ -113,6 +150,8 @@ public class BookingServiceImpl implements BookingService {
                 .endsAt(session != null ? session.getEndsAt() : null)
                 .quantity(booking.getQuantity())
                 .createdAt(booking.getCreatedAt())
+                .refunded(booking.isRefunded())
+                .refundedAt(booking.getRefundedAt())
                 .buyerId(buyer != null ? buyer.getId() : null)
                 .buyerName(fullName(buyer))
                 .build();

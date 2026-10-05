@@ -23,6 +23,7 @@ public final class ExperienceSessionSpecifications {
             Long experienceId, Boolean onlyAvailable, LocalDateTime dateFrom, LocalDateTime dateTo) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
+            predicates.add(cb.isTrue(root.get("active")));
 
             if (experienceId != null) {
                 predicates.add(cb.equal(root.get("experience").get("id"), experienceId));

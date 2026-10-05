@@ -88,15 +88,18 @@ public class OrderServiceImpl implements OrderService {
                 ? new ArrayList<>(cart.getItems())
                 : new ArrayList<>();
         if (items.isEmpty()) {
-            throw new BadRequestException();
+            throw new BadRequestException("No se puede confirmar una compra con el carrito vacío");
         }
 
         // Valida que cada item tenga cupos disponibles; si no, lanza excepción.
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
+            if (!session.isActive()) {
+                throw new BadRequestException("La sesión " + session.getId() + " ya no está disponible");
+            }
             if (session.getAvailableSeats() == null || session.getAvailableSeats() < item.getQuantity()) {
-                throw new BadRequestException();
+                throw new BadRequestException("No hay cupos suficientes para la sesión " + session.getId());
             }
             // Calcula el subtotal sumando el precio unitario de la experiencia por la cantidad del item.
             Experience experience = session.getExperience();
@@ -213,6 +216,8 @@ public class OrderServiceImpl implements OrderService {
                         .endsAt(session != null ? session.getEndsAt() : null)
                         .quantity(booking.getQuantity())
                         .createdAt(booking.getCreatedAt())
+                        .refunded(booking.isRefunded())
+                        .refundedAt(booking.getRefundedAt())
                         .buyerId(buyer != null ? buyer.getId() : null)
                         .buyerName(buyerName(buyer))
                         .build());

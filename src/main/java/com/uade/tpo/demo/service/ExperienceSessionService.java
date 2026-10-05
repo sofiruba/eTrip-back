@@ -29,7 +29,7 @@ public interface ExperienceSessionService {
     ExperienceSessionResponseDTO updateSession(Long sessionId, ExperienceSessionRequestDTO request, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
-    // Borra un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
+    // Da de baja logicamente un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
     void deleteSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 }

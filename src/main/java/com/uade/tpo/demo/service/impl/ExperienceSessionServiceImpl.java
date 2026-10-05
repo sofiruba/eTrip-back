@@ -16,7 +16,6 @@ import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
-import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionSpecifications;
@@ -30,7 +29,6 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
     private final ExperienceSessionRepository experienceSessionRepository;
     private final ExperienceRepository experienceRepository;
-    private final CartItemRepository cartItemRepository;
 
     // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
@@ -53,7 +51,10 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     @Transactional(readOnly = true)
     public ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+        if (!session.isActive()) {
+            throw new ResourceNotFoundException("La sesión solicitada está inactiva");
+        }
 
         return mapToResponseDTO(session);
     }
@@ -91,7 +92,10 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
             User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+        if (!session.isActive()) {
+            throw new BadRequestException("No se puede modificar una sesión inactiva");
+        }
         assertCanManage(session.getExperience(), currentUser);
 
         validateUpdateRequest(request);
@@ -129,25 +133,21 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         return mapToResponseDTO(savedSession);
     }
 
-    // Borra un turno; falla si ya tiene reservas. Solo el dueño de la experiencia o un ADMIN.
+    // Baja lógica un turno. Se conserva para no romper reservas históricas.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
         assertCanManage(session.getExperience(), currentUser);
 
-        if (session.getBookings() != null && !session.getBookings().isEmpty()) {
-            throw new BadRequestException("No se puede borrar el turno porque ya tiene reservas");
+        if (!session.isActive()) {
+            throw new BadRequestException("La sesión ya está inactiva");
         }
 
-        if (cartItemRepository.existsByExperienceSessionId(sessionId)) {
-            throw new BadRequestException(
-                    "No se puede borrar el turno porque esta en el carrito de algun usuario");
-        }
-
-        experienceSessionRepository.delete(session);
+        session.setActive(false);
+        experienceSessionRepository.save(session);
     }
 
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {
@@ -202,9 +202,9 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     private void validateNoOverlap(Long experienceId, Long sessionId, LocalDateTime startsAt, LocalDateTime endsAt)
             throws BadRequestException {
         boolean existsOverlap = sessionId == null
-                ? experienceSessionRepository.existsByExperienceIdAndStartsAtLessThanAndEndsAtGreaterThan(
+                ? experienceSessionRepository.existsByExperienceIdAndActiveTrueAndStartsAtLessThanAndEndsAtGreaterThan(
                         experienceId, endsAt, startsAt)
-                : experienceSessionRepository.existsByExperienceIdAndIdNotAndStartsAtLessThanAndEndsAtGreaterThan(
+                : experienceSessionRepository.existsByExperienceIdAndActiveTrueAndIdNotAndStartsAtLessThanAndEndsAtGreaterThan(
                         experienceId, sessionId, endsAt, startsAt);
 
         if (existsOverlap) {
@@ -231,6 +231,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .endsAt(session.getEndsAt())
                 .capacity(session.getCapacity())
                 .availableSeats(session.getAvailableSeats())
+                .active(session.isActive())
                 .build();
     }
 }

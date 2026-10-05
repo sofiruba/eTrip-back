@@ -36,6 +36,13 @@ public class Booking {
     @Column
     private LocalDateTime createdAt;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean refunded = false;
+
+    @Column
+    private LocalDateTime refundedAt;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
     private Order order;

@@ -74,4 +74,13 @@ public class UsersController {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         return ResponseEntity.ok(userService.updateRole(userId, role, currentUser));
     }
+
+    @PatchMapping("/{userId}/status")
+    public ResponseEntity<UserResponseDTO> updateStatus(
+            @PathVariable Long userId,
+            @RequestParam boolean active,
+            @AuthenticationPrincipal User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        return ResponseEntity.ok(userService.updateStatus(userId, active, currentUser));
+    }
 }

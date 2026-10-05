@@ -15,6 +15,7 @@ public class UserResponseDTO {
     private String firstName;
     private String lastName;
     private String role;
+    private boolean active;
 
     /** Solo se completa si el que consulta es el mismo usuario o un ADMIN. */
     private String email;
