@@ -1,5 +1,6 @@
 package com.uade.tpo.demo.dtos.response;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import lombok.AllArgsConstructor;
@@ -21,6 +22,7 @@ public class BookingResponseDTO {
     private LocalDateTime startsAt;
     private LocalDateTime endsAt;
     private Integer quantity;
+    private BigDecimal unitPrice;
     private LocalDateTime createdAt;
     private boolean refunded;
     private LocalDateTime refundedAt;

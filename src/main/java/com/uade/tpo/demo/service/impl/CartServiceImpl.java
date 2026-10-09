@@ -110,8 +110,13 @@ public class CartServiceImpl implements CartService {
                 .findById(request.getExperienceSessionId())
                 .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
 
-        if (!session.isActive()) {
+        if (!session.isActive()
+                || session.getExperience() == null
+                || !session.getExperience().isActive()) {
             throw new BadRequestException("La sesión seleccionada está inactiva y no se puede agregar al carrito");
+        }
+        if (session.getStartsAt() == null || session.getStartsAt().isBefore(java.time.LocalDateTime.now())) {
+            throw new BadRequestException("La sesión seleccionada ya comenzó o ya pasó");
         }
 
         // Un usuario no puede comprar (agregar al carrito) su propia experiencia.

@@ -23,6 +23,7 @@ public class ExperienceResponseDTO {
 
     /** Precio ya con el descuento aplicado (igual a price si no hay descuento). */
     private BigDecimal finalPrice;
+    private boolean active;
 
     private String location;
 

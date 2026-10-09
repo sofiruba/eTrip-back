@@ -58,7 +58,9 @@ public class ExperiencesController {
             @RequestParam(required = false) Long publisherId,
             @RequestParam(required = false) Boolean onlyDiscounted,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo)
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo,
+            @RequestParam(defaultValue = "false") boolean includeInactive,
+            @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException, BadRequestException {
         ExperienceSearchDTO filter = ExperienceSearchDTO.builder()
                 .categoryId(categoryId)
@@ -72,7 +74,13 @@ public class ExperiencesController {
                 .dateTo(dateTo)
                 .build();
 
-        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size)));
+        boolean canIncludeInactive = includeInactive && currentUser != null
+                && (currentUser.getRole() == com.uade.tpo.demo.entity.Role.ADMIN
+                        || (currentUser.getRole() == com.uade.tpo.demo.entity.Role.CLIENTE
+                                && publisherId != null
+                                && currentUser.getId().equals(publisherId)));
+        return ResponseEntity.ok(
+                experienceService.searchExperiences(filter, pageRequest(page, size), canIncludeInactive));
     }
 
     // Mis publicaciones (modo vendedor).
@@ -85,14 +93,16 @@ public class ExperiencesController {
                 .publisherId(currentUser.getId())
                 .build();
 
-        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size)));
+        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size), true));
     }
 
     // Una experiencia puntual por id.
     @GetMapping("/{experienceId}")
-    public ResponseEntity<ExperienceResponseDTO> getExperienceById(@PathVariable Long experienceId)
+    public ResponseEntity<ExperienceResponseDTO> getExperienceById(
+            @PathVariable Long experienceId,
+            @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException {
-        return ResponseEntity.ok(experienceService.getExperienceById(experienceId));
+        return ResponseEntity.ok(experienceService.getExperienceById(experienceId, currentUser));
     }
 
     // Crea una experiencia: multipart con parte "experience" (JSON como texto, parseado a mano
@@ -148,6 +158,15 @@ public class ExperiencesController {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         experienceService.deleteExperience(experienceId, currentUser);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{experienceId}/status")
+    public ResponseEntity<ExperienceResponseDTO> updateStatus(
+            @PathVariable Long experienceId,
+            @RequestParam boolean active,
+            @AuthenticationPrincipal User currentUser)
+            throws ResourceNotFoundException, ForbiddenException {
+        return ResponseEntity.ok(experienceService.updateStatus(experienceId, active, currentUser));
     }
 
     private PageRequest pageRequest(Integer page, Integer size) {

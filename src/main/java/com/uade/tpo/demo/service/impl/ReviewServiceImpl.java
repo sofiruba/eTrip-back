@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
+import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
@@ -95,6 +96,16 @@ public class ReviewServiceImpl implements ReviewService {
         if (!bookingRepository.existsByOrder_User_IdAndExperienceSession_Experience_Id(
                 currentUser.getId(), experience.getId())) {
             throw new BadRequestException();
+        }
+
+        boolean completedBooking = bookingRepository.findByOrder_User_IdAndExperienceSession_Experience_Id(
+                currentUser.getId(), experience.getId()).stream()
+                .map(reviewBooking -> reviewBooking.getExperienceSession())
+                .filter(java.util.Objects::nonNull)
+                .map(ExperienceSession::getEndsAt)
+                .anyMatch(endsAt -> endsAt != null && endsAt.isBefore(LocalDateTime.now()));
+        if (!completedBooking) {
+            throw new BadRequestException("Solo podés reseñar una experiencia después de que termine.");
         }
 
         Review review = Review.builder()

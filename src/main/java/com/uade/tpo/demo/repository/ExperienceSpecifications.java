@@ -24,9 +24,16 @@ public final class ExperienceSpecifications {
     }
 
     public static Specification<Experience> withFilters(ExperienceSearchDTO f) {
+        return withFilters(f, false);
+    }
+
+    public static Specification<Experience> withFilters(ExperienceSearchDTO f, boolean includeInactive) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
+            if (!includeInactive) {
+                predicates.add(cb.isTrue(root.get("active")));
+            }
             if (f.getCategoryId() != null) {
                 predicates.add(cb.equal(root.get("category").get("id"), f.getCategoryId()));
             }

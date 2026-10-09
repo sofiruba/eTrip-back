@@ -11,6 +11,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceSession;
+import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -19,7 +20,9 @@ import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionSpecifications;
+import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.service.ExperienceSessionService;
+import com.uade.tpo.demo.service.NotificationService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -29,6 +32,8 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
     private final ExperienceSessionRepository experienceSessionRepository;
     private final ExperienceRepository experienceRepository;
+    private final BookingRepository bookingRepository;
+    private final NotificationService notificationService;
 
     // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
@@ -52,8 +57,8 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     public ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
-        if (!session.isActive()) {
-            throw new ResourceNotFoundException("La sesión solicitada está inactiva");
+        if (!isPubliclyActive(session)) {
+            throw new ResourceNotFoundException("La sesión solicitada ya no está disponible");
         }
 
         return mapToResponseDTO(session);
@@ -145,7 +150,29 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         if (!session.isActive()) {
             throw new BadRequestException("La sesión ya está inactiva");
         }
+        if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("No se puede cancelar una sesión que ya comenzó");
+        }
 
+        int releasedSeats = 0;
+        for (Booking booking : bookingRepository.findByExperienceSession_Id(sessionId)) {
+            if (!booking.isRefunded()) {
+                booking.setRefunded(true);
+                booking.setRefundedAt(LocalDateTime.now());
+                releasedSeats += booking.getQuantity();
+                bookingRepository.save(booking);
+                if (booking.getOrder() != null) {
+                    notificationService.create(booking.getOrder().getUser(), "Sesión cancelada",
+                            "La sesión de \"" + session.getExperience().getTitle()
+                                    + "\" fue cancelada y tu reserva fue reembolsada.");
+                }
+            }
+        }
+        if (releasedSeats > 0) {
+            session.setAvailableSeats(Math.min(
+                    session.getCapacity() == null ? releasedSeats : session.getCapacity(),
+                    (session.getAvailableSeats() == null ? 0 : session.getAvailableSeats()) + releasedSeats));
+        }
         session.setActive(false);
         experienceSessionRepository.save(session);
     }
@@ -210,6 +237,14 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         if (existsOverlap) {
             throw new BadRequestException();
         }
+    }
+
+    private boolean isPubliclyActive(ExperienceSession session) {
+        return session.isActive()
+                && session.getExperience() != null
+                && session.getExperience().isActive()
+                && session.getStartsAt() != null
+                && !session.getStartsAt().isBefore(LocalDateTime.now());
     }
 
     private Integer calculateBookedSeats(ExperienceSession session) {

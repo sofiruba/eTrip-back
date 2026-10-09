@@ -24,8 +24,13 @@ public interface ExperienceService {
     Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
             throws ResourceNotFoundException, BadRequestException;
 
+    Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable, boolean includeInactive)
+            throws ResourceNotFoundException, BadRequestException;
+
     // Una experiencia puntual por id.
     ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
+
+    ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser) throws ResourceNotFoundException;
 
     // Crea una experiencia nueva con sus fotos.
     ExperienceResponseDTO createExperience(ExperienceRequestDTO request, List<MultipartFile> images, Long publisherId)
@@ -43,4 +48,7 @@ public interface ExperienceService {
     // Borra una experiencia. Solo el dueño o un ADMIN.
     void deleteExperience(Long experienceId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
+
+    ExperienceResponseDTO updateStatus(Long experienceId, boolean active, User currentUser)
+            throws ResourceNotFoundException, ForbiddenException;
 }

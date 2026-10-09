@@ -34,6 +34,8 @@ import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.service.OrderService;
+import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.EmailService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -47,6 +49,8 @@ public class OrderServiceImpl implements OrderService {
     private final DiscountCouponRepository discountCouponRepository;
     private final BookingRepository bookingRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
+    private final NotificationService notificationService;
+    private final EmailService emailService;
 
     // Mis órdenes; ADMIN ve las de todos.
     @Override
@@ -98,11 +102,17 @@ public class OrderServiceImpl implements OrderService {
             if (!session.isActive()) {
                 throw new BadRequestException("La sesión " + session.getId() + " ya no está disponible");
             }
+            if (session.getStartsAt() == null || session.getStartsAt().isBefore(LocalDateTime.now())) {
+                throw new BadRequestException("La sesión " + session.getId() + " ya comenzó o ya pasó");
+            }
             if (session.getAvailableSeats() == null || session.getAvailableSeats() < item.getQuantity()) {
                 throw new BadRequestException("No hay cupos suficientes para la sesión " + session.getId());
             }
             // Calcula el subtotal sumando el precio unitario de la experiencia por la cantidad del item.
             Experience experience = session.getExperience();
+            if (experience == null || !experience.isActive()) {
+                throw new BadRequestException("La experiencia ya no está publicada");
+            }
             BigDecimal unitPrice = experience != null && experience.getEffectivePrice() != null
                     ? experience.getEffectivePrice()
                     : BigDecimal.ZERO;
@@ -135,6 +145,7 @@ public class OrderServiceImpl implements OrderService {
         List<Booking> bookings = new ArrayList<>();
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
+            Experience experience = session.getExperience();
             session.setAvailableSeats(session.getAvailableSeats() - item.getQuantity());
             experienceSessionRepository.save(session);
 
@@ -146,11 +157,19 @@ public class OrderServiceImpl implements OrderService {
                     .createdAt(LocalDateTime.now())
                     .build();
             bookings.add(bookingRepository.save(booking));
+
+            notificationService.create(user, "Reserva confirmada",
+                    "Tu reserva para \"" + experience.getTitle() + "\" fue confirmada.");
+            if (experience.getPublisher() != null && !experience.getPublisher().getId().equals(user.getId())) {
+                notificationService.create(experience.getPublisher(), "Nueva reserva",
+                        user.getFirstName() + " reservó \"" + experience.getTitle() + "\".");
+            }
         }
 
         cartItemRepository.deleteAll(items);
 
         order.setBookings(bookings);
+        emailService.sendOrderConfirmation(order);
         return toResponse(order);
     }
 
@@ -215,6 +234,7 @@ public class OrderServiceImpl implements OrderService {
                         .startsAt(session != null ? session.getStartsAt() : null)
                         .endsAt(session != null ? session.getEndsAt() : null)
                         .quantity(booking.getQuantity())
+                        .unitPrice(experience != null ? experience.getEffectivePrice() : null)
                         .createdAt(booking.getCreatedAt())
                         .refunded(booking.isRefunded())
                         .refundedAt(booking.getRefundedAt())

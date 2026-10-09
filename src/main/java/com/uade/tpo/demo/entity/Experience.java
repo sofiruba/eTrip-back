@@ -50,6 +50,10 @@ public class Experience {
     @Column(name = "discount_percentage")
     private BigDecimal discountPercentage;
 
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean active = true;
+
     @OneToMany(mappedBy = "experience", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     private List<ExperienceImage> images;

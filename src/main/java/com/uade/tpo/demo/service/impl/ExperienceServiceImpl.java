@@ -39,6 +39,7 @@ import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
+import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSpecifications;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.ExperienceService;
@@ -56,13 +57,16 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     private final ExperienceRepository experienceRepository;
     private final ExperienceCategoryRepository experienceCategoryRepository;
+    private final ExperienceSessionRepository experienceSessionRepository;
     private final UserRepository userRepository;
 
-    // Lista todas las experiencias sin filtrar.
+    // Lista las experiencias publicadas; las inactivas se reservan para gestión.
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> getExperiences(Pageable pageable) {
-        return experienceRepository.findAll(pageable).map(this::toResponse);
+        return experienceRepository.findAll(
+                (root, query, criteriaBuilder) -> criteriaBuilder.isTrue(root.get("active")),
+                pageable).map(this::toResponse);
     }
 
     // Busca experiencias combinando filtros opcionales (categoría, precio, ubicación, fechas, etc).
@@ -70,8 +74,17 @@ public class ExperienceServiceImpl implements ExperienceService {
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
             throws ResourceNotFoundException, BadRequestException {
+        return searchExperiences(filter, pageable, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable,
+            boolean includeInactive) throws ResourceNotFoundException, BadRequestException {
         if (filter == null) {
-            return getExperiences(pageable);
+            return includeInactive
+                    ? experienceRepository.findAll(pageable).map(this::toResponse)
+                    : getExperiences(pageable);
         }
 
         if (filter.getCategoryId() != null) {
@@ -86,7 +99,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             throw new BadRequestException();
         }
 
-        return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter), pageable)
+        return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive), pageable)
                 .map(this::toResponse);
     }
 
@@ -95,6 +108,17 @@ public class ExperienceServiceImpl implements ExperienceService {
     @Transactional(readOnly = true)
     public ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException {
         return toResponse(findExperience(experienceId));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser)
+            throws ResourceNotFoundException {
+        Experience experience = findExperience(experienceId);
+        if (!experience.isActive() && !canManage(experience, currentUser)) {
+            throw new ResourceNotFoundException();
+        }
+        return toResponse(experience);
     }
 
     // Crea una experiencia nueva; exige al menos 1 foto y un título que no se repita para el mismo vendedor.
@@ -203,10 +227,27 @@ public class ExperienceServiceImpl implements ExperienceService {
         assertCanManage(experience, currentUser);
 
         if (experience.getSessions() != null && !experience.getSessions().isEmpty()) {
-            throw new BadRequestException();
+            boolean hasBookings = experience.getSessions().stream()
+                    .anyMatch(session -> session.getBookings() != null && !session.getBookings().isEmpty());
+            if (hasBookings) {
+                throw new BadRequestException(
+                        "No se puede eliminar una experiencia que tiene reservas. Reembolsá las reservas y conservá el historial.");
+            }
+            experienceSessionRepository.deleteAll(experience.getSessions());
+            experience.getSessions().clear();
         }
 
         experienceRepository.delete(experience);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public ExperienceResponseDTO updateStatus(Long experienceId, boolean active, User currentUser)
+            throws ResourceNotFoundException, ForbiddenException {
+        Experience experience = findExperience(experienceId);
+        assertCanManage(experience, currentUser);
+        experience.setActive(active);
+        return toResponse(experienceRepository.save(experience));
     }
 
     private Experience findExperience(Long experienceId) throws ResourceNotFoundException {
@@ -221,13 +262,17 @@ public class ExperienceServiceImpl implements ExperienceService {
     }
 
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {
+        if (!canManage(experience, currentUser)) {
+            throw new ForbiddenException();
+        }
+    }
+
+    private boolean canManage(Experience experience, User currentUser) {
         boolean isOwner = experience.getPublisher() != null
                 && currentUser != null
                 && experience.getPublisher().getId().equals(currentUser.getId());
         boolean isAdmin = currentUser != null && currentUser.getRole() == Role.ADMIN;
-        if (!isOwner && !isAdmin) {
-            throw new ForbiddenException();
-        }
+        return isOwner || isAdmin;
     }
 
     private void validateData(ExperienceRequestDTO request) throws BadRequestException {
@@ -242,6 +287,11 @@ public class ExperienceServiceImpl implements ExperienceService {
         }
         if (request.getCategoryId() == null) {
             throw new BadRequestException();
+        }
+        if (request.getLocation() == null || request.getLocation().isBlank()
+                || request.getLocation().split(",").length < 2
+                || request.getLocation().matches(".*\\d.*")) {
+            throw new BadRequestException("Indicá un barrio y una ciudad válidos, sin dirección exacta.");
         }
     }
 
@@ -351,6 +401,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .price(experience.getPrice())
                 .discountPercentage(experience.getDiscountPercentage())
                 .finalPrice(experience.getEffectivePrice())
+                .active(experience.isActive())
                 .location(experience.getLocation())
                 .imagesBase64(imagesBase64)
                 .categoryId(experience.getCategory() != null ? experience.getCategory().getId() : null)

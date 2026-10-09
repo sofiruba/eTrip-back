@@ -34,6 +34,9 @@ public class AuthenticationService {
                 || trimToNull(request.getLastname()) == null) {
             throw new BadRequestException();
         }
+        if (request.getPassword().trim().length() < 6) {
+            throw new BadRequestException("La contraseña debe tener al menos 6 caracteres");
+        }
         if (repository.existsByDisplayUsername(username)) {
             throw new BadRequestException();
         }

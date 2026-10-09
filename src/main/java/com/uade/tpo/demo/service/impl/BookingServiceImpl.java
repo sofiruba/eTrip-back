@@ -21,6 +21,7 @@ import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.service.BookingService;
+import com.uade.tpo.demo.service.NotificationService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -31,6 +32,7 @@ public class BookingServiceImpl implements BookingService {
     private final BookingRepository bookingRepository;
     private final ExperienceRepository experienceRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
+    private final NotificationService notificationService;
 
     // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
@@ -106,14 +108,18 @@ public class BookingServiceImpl implements BookingService {
         Order order = booking.getOrder();
         boolean isBuyer = order != null && order.getUser() != null
                 && order.getUser().getId().equals(user.getId());
-        if (!isBuyer && !isAdmin(user)) {
+        ExperienceSession session = booking.getExperienceSession();
+        boolean isSeller = session != null
+                && session.getExperience() != null
+                && session.getExperience().getPublisher() != null
+                && session.getExperience().getPublisher().getId().equals(user.getId());
+        if (!isBuyer && !isSeller && !isAdmin(user)) {
             throw new ForbiddenException("Solo el comprador o un administrador puede solicitar el reembolso");
         }
         if (booking.isRefunded()) {
             throw new BadRequestException("La reserva ya fue reembolsada");
         }
 
-        ExperienceSession session = booking.getExperienceSession();
         if (session == null) {
             throw new BadRequestException("La reserva no tiene una sesión asociada");
         }
@@ -126,7 +132,11 @@ public class BookingServiceImpl implements BookingService {
         experienceSessionRepository.save(session);
         booking.setRefunded(true);
         booking.setRefundedAt(LocalDateTime.now());
-        return toResponse(bookingRepository.save(booking));
+        Booking saved = bookingRepository.save(booking);
+        notificationService.create(order != null ? order.getUser() : null, "Reserva reembolsada",
+                "Tu reserva para \"" + (session.getExperience() != null ? session.getExperience().getTitle() : "la experiencia")
+                        + "\" fue cancelada y reembolsada.");
+        return toResponse(saved);
     }
 
     private boolean isAdmin(User user) {
@@ -149,6 +159,7 @@ public class BookingServiceImpl implements BookingService {
                 .startsAt(session != null ? session.getStartsAt() : null)
                 .endsAt(session != null ? session.getEndsAt() : null)
                 .quantity(booking.getQuantity())
+                .unitPrice(experience != null ? experience.getEffectivePrice() : null)
                 .createdAt(booking.getCreatedAt())
                 .refunded(booking.isRefunded())
                 .refundedAt(booking.getRefundedAt())
