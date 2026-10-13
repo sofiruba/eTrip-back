@@ -35,7 +35,6 @@ import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.NotificationService;
-import com.uade.tpo.demo.service.EmailService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -50,7 +49,6 @@ public class OrderServiceImpl implements OrderService {
     private final BookingRepository bookingRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
     private final NotificationService notificationService;
-    private final EmailService emailService;
 
     // Mis órdenes; ADMIN ve las de todos.
     @Override
@@ -169,7 +167,6 @@ public class OrderServiceImpl implements OrderService {
         cartItemRepository.deleteAll(items);
 
         order.setBookings(bookings);
-        emailService.sendOrderConfirmation(order);
         return toResponse(order);
     }
 
