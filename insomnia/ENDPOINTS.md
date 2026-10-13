@@ -74,7 +74,8 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
   "password": "1234"
 }
 ```
-`username` y `email` son únicos. Si falta cualquier campo, o el username/email ya existe → `400`.
+`username` y `email` son únicos. Si falta cualquier campo → `400`. Si el username o el email ya existen → `400` con
+`"Ese nombre de usuario ya está en uso"` / `"Ya hay una cuenta con ese email"`.
 
 ### POST `/api/v1/auth/authenticate`
 Acepta **email o username** en el mismo campo `usernameOrEmail`:
@@ -92,6 +93,22 @@ o
 }
 ```
 Respuesta: `{ "access_token": "eyJ..." }`
+
+### GET `/api/v1/auth/availability?username=nachoc&email=nacho@etrip.com`
+Los dos parámetros son opcionales. Respuesta: `{ "usernameAvailable": false, "emailAvailable": true }`
+(`null` en el que no se mandó). El registro del front lo usa para avisar antes de seguir.
+
+### Recuperar contraseña (3 pasos)
+1. **POST `/api/v1/auth/forgot-password`** — `{ "usernameOrEmail": "nacho@etrip.com" }` → `{ "devCode": "123456" }`.
+   Genera un código de 6 dígitos que vence en 15 minutos; pedirlo de nuevo anula el anterior.
+   `404` si la cuenta no existe, `400` si está desactivada. **Por ahora no hay mail:** el código se
+   imprime en la consola del back y, mientras `app.password-reset.show-code=true` (application.properties),
+   viaja en `devCode` y el front lo muestra en la consola del navegador. Al entregar: ponerlo en `false`.
+   Para pasarlo a mail, implementar `PasswordResetSender`.
+2. **POST `/api/v1/auth/verify-reset-code`** — `{ "usernameOrEmail": "...", "code": "123456" }` →
+   `204` si es válido, `400` si no. No cambia nada. Con 5 intentos fallidos el código se invalida.
+3. **POST `/api/v1/auth/reset-password`** — `{ "usernameOrEmail": "...", "code": "123456", "newPassword": "nueva123" }`
+   → `{ "access_token": "eyJ..." }` (queda logueado). Mínimo 6 caracteres.
 
 ---
 
