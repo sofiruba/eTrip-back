@@ -1,6 +1,7 @@
 package com.uade.tpo.demo.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -49,6 +50,16 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .findAll(ExperienceSessionSpecifications.withFilters(experienceId, onlyAvailable, dateFrom, dateTo),
                         pageable)
                 .map(this::mapToResponseDTO);
+    }
+
+    // Fechas que gestiona el usuario, con pasadas y canceladas: ADMIN ve todas; el resto, las de sus experiencias.
+    @Override
+    @Transactional(readOnly = true)
+    public List<ExperienceSessionResponseDTO> getManagedSessions(User currentUser) {
+        List<ExperienceSession> sessions = currentUser.getRole() == Role.ADMIN
+                ? experienceSessionRepository.findAllByOrderByStartsAtAsc()
+                : experienceSessionRepository.findByExperience_Publisher_IdOrderByStartsAtAsc(currentUser.getId());
+        return sessions.stream().map(this::mapToResponseDTO).toList();
     }
 
     // Un turno puntual por id.
@@ -105,10 +116,9 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
         validateUpdateRequest(request);
 
-        if (request.getExperienceId() != null) {
-            Experience experience = experienceRepository.findById(request.getExperienceId())
-                    .orElseThrow(ResourceNotFoundException::new);
-            session.setExperience(experience);
+        // Una fecha no se puede pasar a otra experiencia (se llevaría sus reservas a una publicación ajena)
+        if (request.getExperienceId() != null && !request.getExperienceId().equals(session.getExperience().getId())) {
+            throw new BadRequestException("No se puede mover una fecha a otra experiencia");
         }
 
         if (request.getStartsAt() != null) {
@@ -127,7 +137,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
             Integer bookedSeats = calculateBookedSeats(session);
 
             if (request.getCapacity() < bookedSeats) {
-                throw new BadRequestException();
+                throw new BadRequestException("El cupo no puede ser menor a los " + bookedSeats + " lugares ya reservados");
             }
 
             session.setCapacity(request.getCapacity());
@@ -210,19 +220,19 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
     private void validateDateRange(LocalDateTime startsAt, LocalDateTime endsAt) throws BadRequestException {
         if (startsAt == null || endsAt == null || !startsAt.isBefore(endsAt)) {
-            throw new BadRequestException();
+            throw new BadRequestException("La hora de fin tiene que ser posterior a la de inicio");
         }
     }
 
     private void validateFutureStart(LocalDateTime startsAt) throws BadRequestException {
         if (startsAt.isBefore(LocalDateTime.now())) {
-            throw new BadRequestException();
+            throw new BadRequestException("La fecha tiene que ser futura");
         }
     }
 
     private void validateCapacity(Integer capacity) throws BadRequestException {
         if (capacity == null || capacity <= 0) {
-            throw new BadRequestException();
+            throw new BadRequestException("El cupo tiene que ser mayor a 0");
         }
     }
 
@@ -235,7 +245,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                         experienceId, sessionId, endsAt, startsAt);
 
         if (existsOverlap) {
-            throw new BadRequestException();
+            throw new BadRequestException("Ya hay otra fecha de esta experiencia en ese horario");
         }
     }
 

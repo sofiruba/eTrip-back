@@ -1,6 +1,7 @@
 package com.uade.tpo.demo.repository;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,11 @@ import com.uade.tpo.demo.entity.ExperienceSession;
 public interface ExperienceSessionRepository
         extends JpaRepository<ExperienceSession, Long>, JpaSpecificationExecutor<ExperienceSession> {
     Page<ExperienceSession> findByExperienceId(Long experienceId, Pageable pageable);
+
+    // Historial completo (pasadas y canceladas) para quien gestiona las fechas.
+    List<ExperienceSession> findAllByOrderByStartsAtAsc();
+
+    List<ExperienceSession> findByExperience_Publisher_IdOrderByStartsAtAsc(Long publisherId);
 
     boolean existsByExperienceIdAndActiveTrueAndStartsAtLessThanAndEndsAtGreaterThan(
             Long experienceId,

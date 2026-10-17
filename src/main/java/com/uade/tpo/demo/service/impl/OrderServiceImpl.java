@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,6 +37,8 @@ import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.NotificationService;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -49,6 +52,7 @@ public class OrderServiceImpl implements OrderService {
     private final BookingRepository bookingRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
     private final NotificationService notificationService;
+    private final EntityManager entityManager;
 
     // Mis órdenes; ADMIN ve las de todos.
     @Override
@@ -92,6 +96,15 @@ public class OrderServiceImpl implements OrderService {
         if (items.isEmpty()) {
             throw new BadRequestException("No se puede confirmar una compra con el carrito vacío");
         }
+
+        // Bloquea las sesiones del carrito hasta que termine la transacción y las vuelve a leer de la base
+        // (SELECT ... FOR UPDATE). Si dos personas compran el último lugar a la vez, la segunda espera
+        // y ve los cupos ya descontados. Se bloquean en orden de id para que dos compras no se traben entre sí.
+        items.stream()
+                .map(CartItem::getExperienceSession)
+                .distinct()
+                .sorted(Comparator.comparing(ExperienceSession::getId))
+                .forEach(session -> entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE));
 
         // Valida que cada item tenga cupos disponibles; si no, lanza excepción.
         BigDecimal subtotal = BigDecimal.ZERO;
@@ -180,14 +193,15 @@ public class OrderServiceImpl implements OrderService {
 
         DiscountCoupon coupon = discountCouponRepository
                 .findByCode(request.getCouponCode().trim().toUpperCase())
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("No existe un cupón con ese código"));
 
-        if (DiscountCouponServiceImpl.reasonIfInvalid(coupon) != null) {
-            throw new BadRequestException();
+        String reason = DiscountCouponServiceImpl.reasonIfInvalid(coupon);
+        if (reason != null) {
+            throw new BadRequestException(DiscountCouponServiceImpl.describeReason(reason));
         }
 
         if (orderRepository.existsByUserIdAndDiscountCouponId(user.getId(), coupon.getId())) {
-            throw new BadRequestException();
+            throw new BadRequestException(DiscountCouponServiceImpl.describeReason(DiscountCouponServiceImpl.ALREADY_USED));
         }
 
         return coupon;

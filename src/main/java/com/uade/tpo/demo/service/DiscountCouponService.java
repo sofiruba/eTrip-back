@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
 import com.uade.tpo.demo.dtos.response.CouponValidationDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
+import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
@@ -16,8 +17,8 @@ public interface DiscountCouponService {
     // Un cupón puntual por id.
     DiscountCouponResponseDTO getCouponById(Long couponId) throws ResourceNotFoundException;
 
-    // Chequea si un código es aplicable hoy, sin gastarlo.
-    CouponValidationDTO validateCoupon(String code);
+    // Chequea si un código es aplicable hoy para este usuario (vigente y sin usar), sin gastarlo.
+    CouponValidationDTO validateCoupon(String code, User user);
 
     // Crea un cupón nuevo.
     DiscountCouponResponseDTO createCoupon(DiscountCouponRequestDTO request) throws BadRequestException;

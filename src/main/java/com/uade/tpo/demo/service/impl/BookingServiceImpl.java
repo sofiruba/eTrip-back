@@ -29,6 +29,9 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class BookingServiceImpl implements BookingService {
 
+    // Mismo plazo que muestra el front (utils/cancellation.js)
+    private static final int REFUND_DEADLINE_HOURS = 48;
+
     private final BookingRepository bookingRepository;
     private final ExperienceRepository experienceRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
@@ -114,7 +117,7 @@ public class BookingServiceImpl implements BookingService {
                 && session.getExperience().getPublisher() != null
                 && session.getExperience().getPublisher().getId().equals(user.getId());
         if (!isBuyer && !isSeller && !isAdmin(user)) {
-            throw new ForbiddenException("Solo el comprador o un administrador puede solicitar el reembolso");
+            throw new ForbiddenException("Solo el comprador, el anfitrión o un administrador pueden cancelar la reserva");
         }
         if (booking.isRefunded()) {
             throw new BadRequestException("La reserva ya fue reembolsada");
@@ -125,6 +128,14 @@ public class BookingServiceImpl implements BookingService {
         }
         if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
             throw new BadRequestException("No se puede reembolsar una reserva cuya sesión ya comenzó");
+        }
+        // Política de cancelación: el comprador puede pedir el reembolso hasta 48 h antes.
+        // El anfitrión y el admin pueden cancelar hasta que empiece (por ejemplo, si se suspende).
+        boolean buyerOnly = isBuyer && !isSeller && !isAdmin(user);
+        if (buyerOnly && session.getStartsAt() != null
+                && session.getStartsAt().minusHours(REFUND_DEADLINE_HOURS).isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Solo podés cancelar con reembolso hasta " + REFUND_DEADLINE_HOURS
+                    + " horas antes de que empiece");
         }
 
         int availableSeats = session.getAvailableSeats() == null ? 0 : session.getAvailableSeats();

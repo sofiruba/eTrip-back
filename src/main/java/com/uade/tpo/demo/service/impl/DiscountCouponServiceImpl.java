@@ -13,6 +13,7 @@ import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
 import com.uade.tpo.demo.dtos.response.CouponValidationDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
 import com.uade.tpo.demo.entity.DiscountCoupon;
+import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
@@ -43,20 +44,39 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
                 .orElseThrow(() -> new ResourceNotFoundException("No existe un cupon con id " + couponId)));
     }
 
-    // Chequea si un código es aplicable hoy (existe, activo, vigente); no lo gasta ni lo modifica.
+    static final String ALREADY_USED = "ALREADY_USED";
+
+    // Chequea si un código es aplicable hoy (existe, activo, vigente) y si este usuario todavía no lo usó;
+    // no lo gasta ni lo modifica. Es el mismo criterio que se aplica al confirmar la compra.
     @Override
     @Transactional(readOnly = true)
-    public CouponValidationDTO validateCoupon(String code) {
+    public CouponValidationDTO validateCoupon(String code, User user) {
         String normalized = code == null ? "" : code.trim().toUpperCase();
         DiscountCoupon coupon = discountCouponRepository.findByCode(normalized).orElse(null);
 
         String reason = reasonIfInvalid(coupon);
+        if (reason == null && user != null && orderRepository.existsByUserIdAndDiscountCouponId(user.getId(), coupon.getId())) {
+            reason = ALREADY_USED;
+        }
         return CouponValidationDTO.builder()
                 .code(normalized)
                 .valid(reason == null)
                 .reason(reason)
                 .percentage(coupon != null ? coupon.getPercentage() : null)
                 .build();
+    }
+
+    // Texto para el usuario de cada código de motivo (lo usa la creación de la orden).
+    static String describeReason(String reason) {
+        return switch (reason) {
+            case "NOT_FOUND" -> "No existe un cupón con ese código";
+            case "INACTIVE" -> "Este cupón ya no está activo";
+            case "INVALID_PERCENTAGE" -> "Este cupón no tiene un descuento válido";
+            case "NOT_YET_VALID" -> "Este cupón todavía no está vigente";
+            case "EXPIRED" -> "Este cupón venció";
+            case ALREADY_USED -> "Ya usaste este cupón en otra compra";
+            default -> "El cupón no es válido";
+        };
     }
 
     // Devuelve null si el cupón es aplicable hoy, o un código de motivo si no.

@@ -48,16 +48,25 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 | Recurso | Permisos |
 |---|---|
 | `/api/v1/auth/**` | público |
-| `/users/**` | CLIENTE o ADMIN (algunas acciones dentro, como `GET /users` o `PATCH .../role`, exigen ADMIN y devuelven 403 si no) |
-| `/experiences`, `/experience-categories`, `/experience-sessions` | CLIENTE o ADMIN |
-| `/reviews`, `/carts`, `/orders`, `/bookings` | CLIENTE o ADMIN |
-| `GET /discount-coupons/**` | CLIENTE o ADMIN |
-| `POST/PUT/DELETE /discount-coupons/**` | solo ADMIN |
+| `GET /experiences/**`, `GET /experience-categories/**`, `GET /experience-sessions/**`, `GET /reviews/experience/**`, `GET /users/{id}` | **público** (el catálogo se ve sin sesión) |
+| `GET /experiences/mine`, `GET /experience-sessions/manage` | CLIENTE o ADMIN (aunque estén bajo un prefijo público) |
+| `POST/PUT/DELETE /experience-categories/**` | **solo ADMIN** |
+| `/users/**` (resto) | CLIENTE o ADMIN (algunas acciones dentro, como `GET /users` o `PATCH .../role`, exigen ADMIN y devuelven 403 si no) |
+| `/experiences`, `/experience-sessions` (escrituras) | CLIENTE o ADMIN; además solo el dueño de la experiencia o un ADMIN (403 si no) |
+| `/reviews`, `/carts`, `/orders`, `/bookings`, `/notifications` | CLIENTE o ADMIN |
+| `GET /discount-coupons/validate` | CLIENTE o ADMIN |
+| Resto de `/discount-coupons/**` (listar, ver, crear, editar, borrar) | **solo ADMIN** |
 
 - **`register` siempre crea rol `CLIENTE`** (el campo `role` del body, si lo mandás, se ignora).
-- Para tener un ADMIN: `UPDATE user SET role='ADMIN' WHERE email='...';` en MySQL y volver a hacer
-  `authenticate` para obtener un token nuevo (el rol viaja adentro del JWT). También podés pedirle
-  a otro ADMIN que te lo asigne con `PATCH /users/{id}/role?role=ADMIN`.
+- Para tener un ADMIN: `UPDATE user SET role='ADMIN' WHERE email='...';` en MySQL. El rol **no**
+  viaja en el JWT (solo `sub`, `id`, `iat`, `exp`): se lee de la base en cada request, así que el
+  cambio se aplica enseguida. También podés pedirle a otro ADMIN que te lo asigne con
+  `PATCH /users/{id}/role?role=ADMIN`.
+- Una cuenta desactivada (`PATCH /users/{id}/status?active=false`) no puede loguearse y su token
+  deja de servir aunque no haya vencido (el filtro JWT chequea `isEnabled()`).
+- CORS: los orígenes permitidos salen de `app.cors.allowed-origins` (por defecto
+  `http://localhost:5173,http://localhost:3000`). Al desplegar el front, definir la variable de
+  entorno `CORS_ALLOWED_ORIGINS` con la URL de Vercel.
 - Fechas: formato ISO local sin zona → `2026-10-15T10:00:00`.
 
 ---
@@ -99,6 +108,10 @@ Los dos parámetros son opcionales. Respuesta: `{ "usernameAvailable": false, "e
 (`null` en el que no se mandó). El registro del front lo usa para avisar antes de seguir.
 
 ### Recuperar contraseña (3 pasos)
+El código pendiente se guarda en la tabla `password_reset_codes` (hash del código, vencimiento e
+intentos fallidos; `user_id` único = como mucho un código por usuario). Se borra al usarlo, al vencer
+o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_code_*`.
+
 1. **POST `/api/v1/auth/forgot-password`** — `{ "usernameOrEmail": "nacho@etrip.com" }` → `{ "devCode": "123456" }`.
    Genera un código de 6 dígitos que vence en 15 minutos; pedirlo de nuevo anula el anterior.
    `404` si la cuenta no existe, `400` si está desactivada. **Por ahora no hay mail:** el código se
@@ -118,7 +131,7 @@ Los dos parámetros son opcionales. Respuesta: `{ "usernameAvailable": false, "e
 |---|---|---|---|
 | GET | `/users/me` | propio | Mi perfil: `username`, nombre, `role`, `email`, `publishedExperiences`, `bookingsCount`, `reviewsCount`. |
 | PUT | `/users/me` | propio | Editar `firstName`/`lastName` (al menos uno). |
-| GET | `/users/{userId}` | cualquiera logueado | Perfil público de otro usuario (sin email/contadores privados salvo que seas vos o ADMIN). |
+| GET | `/users/{userId}` | público | Perfil público de otro usuario (sin email/contadores privados salvo que seas vos o ADMIN). Sin sesión también responde (perfil reducido). |
 | GET | `/users?page=&size=` | **ADMIN** | Lista de usuarios. |
 | PATCH | `/users/{userId}/role?role=CLIENTE\|ADMIN` | **ADMIN** | Asigna permisos. No podés cambiarte tu propio rol (403). |
 
@@ -219,10 +232,14 @@ Solo el dueño de la experiencia o un ADMIN. `discountPercentage` debe ser `0 <=
 |---|---|---|
 | GET | `/experience-sessions?page=&size=&...filtros` | — (ver filtros abajo) |
 | GET | `/experience-sessions/experience/{experienceId}?page=&size=&onlyAvailable=` | — |
+| GET | `/experience-sessions/manage` | — **(logueado)** fechas que gestiono, **incluidas pasadas y canceladas**: ADMIN recibe todas; cualquier otro usuario, las de sus experiencias. Lista simple (no paginada), ordenada por `startsAt`. |
 | GET | `/experience-sessions/{sessionId}` | — |
 | POST | `/experience-sessions` | ver abajo |
 | PUT | `/experience-sessions/{sessionId}` | ver abajo (campos opcionales) |
-| DELETE | `/experience-sessions/{sessionId}` | — |
+| DELETE | `/experience-sessions/{sessionId}` | — (cancela la fecha: ver abajo) |
+
+> Los listados públicos (`GET /experience-sessions` y `/experience/{id}`) solo devuelven sesiones
+> **activas y futuras** de experiencias activas. Para el historial del anfitrión usar `/manage`.
 
 ### POST
 ```json
@@ -242,6 +259,8 @@ Solo el dueño de la experiencia o un ADMIN. `discountPercentage` debe ser `0 <=
   "capacity": 25
 }
 ```
+> Una sesión no se puede pasar a otra experiencia: si `experienceId` viene y es distinto al actual → `400`.
+> `capacity` no puede quedar por debajo de los lugares ya reservados.
 
 ### Filtros de `GET /experience-sessions` (opcionales, se combinan con AND)
 
@@ -256,10 +275,11 @@ Ejemplo: `/experience-sessions?experienceId=1&onlyAvailable=true&dateFrom=2027-0
 > `startsAt` debe ser futuro, `endsAt` posterior a `startsAt`, `capacity > 0`, sin solapamiento
 > (ni exacto ni parcial) con otra sesión de la misma experiencia — un `POST` con las mismas
 > fechas que una sesión ya creada da `400`, no duplica nada. `availableSeats` se inicializa con
-> `capacity`. No se puede borrar una sesión con reservas. Si no hay `availableSeats`, no se puede
-> agregar al carrito (lo valida el módulo de Carrito). **`POST`/`PUT`/`DELETE` son solo para el
-> dueño (publisher) de la experiencia o un `ADMIN`** (`403` en otro caso) — el `GET` sigue
-> abierto a cualquier `CLIENTE`/`ADMIN` logueado.
+> `capacity`. **`DELETE` no borra:** cancela la sesión (`active=false`), reembolsa todas sus reservas
+> y les manda una notificación a los compradores; una sesión que ya empezó no se puede cancelar (`400`).
+> Si no hay `availableSeats`, no se puede agregar al carrito (lo valida el módulo de Carrito).
+> **`POST`/`PUT`/`DELETE` son solo para el dueño (publisher) de la experiencia o un `ADMIN`**
+> (`403` en otro caso) — los `GET` públicos se ven sin sesión.
 
 ---
 
@@ -337,9 +357,13 @@ de cada experiencia (si tiene), crea la orden + una `Booking` con voucher por ca
 ```
 O sin body / `{}` para no aplicar cupón.
 
-> Requiere que el carrito tenga items. Mientras el carrito sea un stub, para probar el checkout hay
-> que **cargar `carts` + `cart_items` a mano en MySQL**. El `couponCode` se normaliza a mayúsculas
-> y se valida vigencia + `active` (mismo criterio que `GET /discount-coupons/validate`).
+> Requiere que el carrito tenga items. Todo pasa en una transacción: si algo falla, no se descuenta
+> nada. Antes de validar, **bloquea las sesiones del carrito** (`SELECT ... FOR UPDATE`) y las vuelve
+> a leer: si dos personas compran el último lugar a la vez, la segunda espera y recibe `400` por
+> falta de cupos (no se sobrevende). Valida también que cada sesión siga activa y sea futura, y que
+> la experiencia siga publicada. El `couponCode` se normaliza a mayúsculas y se valida igual que
+> `GET /discount-coupons/validate` (incluido que no lo hayas usado antes); si no sirve, el `400`
+> trae el motivo en `message` ("Este cupón venció", "Ya usaste este cupón en otra compra"…).
 
 ---
 
@@ -351,8 +375,14 @@ O sin body / `{}` para no aplicar cupón.
 | GET | `/bookings/sales?page=0&size=10` | **Modo vendedor:** reservas sobre las experiencias que publiqué, con `buyerId`/`buyerName`. |
 | GET | `/bookings/experience/{experienceId}?page=0&size=10` | Reservas de una experiencia puntual. Solo el dueño de esa experiencia o ADMIN (403/404 si no). |
 | GET | `/bookings/{bookingId}` | Una reserva. La ve el comprador, el vendedor de esa experiencia, o ADMIN. |
+| POST | `/bookings/{bookingId}/refund` | Cancela la reserva con reembolso y devuelve los lugares a la sesión. Ver política abajo. |
 
-Solo lectura: las reservas se generan en el checkout (`POST /orders`).
+Las reservas se generan en el checkout (`POST /orders`).
+
+**Política de cancelación (`refund`):** el **comprador** puede cancelar hasta **48 h antes** de que
+empiece la sesión (después → `400` con el motivo). El **anfitrión** de la experiencia y un **ADMIN**
+pueden cancelar hasta el inicio (por ejemplo, si se suspende). Una sesión que ya empezó no se reembolsa.
+Una reserva reembolsada no habilita a dejar reseña.
 
 ---
 
@@ -360,9 +390,9 @@ Solo lectura: las reservas se generan en el checkout (`POST /orders`).
 
 | Método | Ruta | Permiso | Body |
 |---|---|---|---|
-| GET | `/discount-coupons?page=0&size=10` | CLIENTE/ADMIN | — |
+| GET | `/discount-coupons?page=0&size=10` | ADMIN | — |
 | GET | `/discount-coupons/validate?code=` | CLIENTE/ADMIN | — (chequeo antes de pagar, ver abajo) |
-| GET | `/discount-coupons/{couponId}` | CLIENTE/ADMIN | — |
+| GET | `/discount-coupons/{couponId}` | ADMIN | — |
 | POST | `/discount-coupons` | ADMIN | ver abajo |
 | PUT | `/discount-coupons/{couponId}` | ADMIN | ver abajo (opcional) |
 | DELETE | `/discount-coupons/{couponId}` | ADMIN | — |
@@ -392,8 +422,9 @@ Siempre devuelve `200`, nunca `404`:
 { "code": "VERANO2026", "valid": true, "reason": null, "percentage": 15.00 }
 ```
 `reason` cuando `valid=false`: `NOT_FOUND`, `INACTIVE`, `NOT_YET_VALID`, `EXPIRED`,
-`INVALID_PERCENTAGE`. Pensado para que el front lo llame apenas el usuario tipea el código, antes
-de tocar `POST /orders`.
+`INVALID_PERCENTAGE`, `ALREADY_USED` (el usuario logueado ya lo usó en otra orden: cada cliente puede
+usar un cupón una sola vez). Pensado para que el front lo llame apenas el usuario tipea el código,
+antes de tocar `POST /orders`.
 
 > `code` se guarda en mayúsculas y es único (case-insensitive). `percentage` entre 1 y 100.
 > `validFrom < validUntil`. Al borrar un cupón ya usado en una orden, no se elimina: se pone

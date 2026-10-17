@@ -9,6 +9,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.uade.tpo.demo.controllers.auth.AuthenticationRequest;
 import com.uade.tpo.demo.controllers.auth.AuthenticationResponse;
@@ -17,10 +18,12 @@ import com.uade.tpo.demo.controllers.auth.ForgotPasswordResponse;
 import com.uade.tpo.demo.controllers.auth.ResetPasswordRequest;
 import com.uade.tpo.demo.controllers.auth.RegisterRequest;
 import com.uade.tpo.demo.controllers.config.JwtService;
+import com.uade.tpo.demo.entity.PasswordResetCode;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.repository.PasswordResetCodeRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,7 @@ public class AuthenticationService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UserRepository repository;
+    private final PasswordResetCodeRepository resetCodeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
@@ -113,7 +117,8 @@ public class AuthenticationService {
     }
 
     // Genera un código de 6 dígitos y se lo manda al usuario (ver PasswordResetSender).
-    // Pedirlo otra vez genera uno nuevo y anula el anterior.
+    // Pedirlo otra vez genera uno nuevo y anula el anterior (un solo código pendiente por usuario).
+    @Transactional
     public ForgotPasswordResponse forgotPassword(String usernameOrEmail)
             throws BadRequestException, ResourceNotFoundException {
         User user = findUser(usernameOrEmail)
@@ -122,22 +127,28 @@ public class AuthenticationService {
             throw new BadRequestException("Esta cuenta está desactivada. Pedile a un administrador que la reactive.");
         }
         String code = String.format("%06d", RANDOM.nextInt(1_000_000));
-        user.setResetCodeHash(passwordEncoder.encode(code));
-        user.setResetCodeExpiresAt(LocalDateTime.now().plusMinutes(RESET_CODE_MINUTES));
-        user.setResetCodeAttempts(0);
-        repository.save(user);
+        // Si había uno pendiente lo reutilizamos (user_id es único) con el código nuevo y los intentos en cero
+        PasswordResetCode resetCode = resetCodeRepository.findByUserId(user.getId())
+                .orElseGet(() -> PasswordResetCode.builder().user(user).build());
+        resetCode.setCodeHash(passwordEncoder.encode(code));
+        resetCode.setExpiresAt(LocalDateTime.now().plusMinutes(RESET_CODE_MINUTES));
+        resetCode.setAttempts(0);
+        resetCodeRepository.save(resetCode);
         passwordResetSender.send(user, code);
         return ForgotPasswordResponse.builder()
                 .devCode(showResetCode ? code : null)
                 .build();
     }
 
-    // Revisa el código sin cambiar nada (el front lo usa para pasar al paso de la contraseña nueva).
+    // Revisa el código sin cambiar la contraseña (el front lo usa para pasar al paso de la contraseña nueva).
+    // Un intento fallido sí se cuenta: BadRequestException es checked, así que no deshace la transacción.
+    @Transactional
     public void verifyResetCode(ResetPasswordRequest request) throws BadRequestException {
         checkResetCode(request);
     }
 
-    // Cambia la contraseña si el código es correcto y deja al usuario logueado.
+    // Cambia la contraseña si el código es correcto, borra el código y deja al usuario logueado.
+    @Transactional
     public AuthenticationResponse resetPassword(ResetPasswordRequest request) throws BadRequestException {
         User user = checkResetCode(request);
         String newPassword = request.getNewPassword();
@@ -145,42 +156,35 @@ public class AuthenticationService {
             throw new BadRequestException("La contraseña debe tener al menos 6 caracteres");
         }
         user.setPassword(passwordEncoder.encode(newPassword));
-        clearResetCode(user);
         repository.save(user);
+        resetCodeRepository.deleteByUserId(user.getId());
         return AuthenticationResponse.builder()
                 .accessToken(jwtService.generateToken(user))
                 .build();
     }
 
     // Devuelve el usuario si el código es válido. Cada intento fallido suma uno; al llegar
-    // al máximo el código se invalida y hay que pedir otro.
+    // al máximo (o si ya venció) el código se borra y hay que pedir otro.
     private User checkResetCode(ResetPasswordRequest request) throws BadRequestException {
         User user = findUser(request.getUsernameOrEmail()).orElseThrow(() -> new BadRequestException(INVALID_CODE));
-        String code = trimToNull(request.getCode());
-        boolean usable = user.getResetCodeHash() != null
-                && user.getResetCodeExpiresAt() != null
-                && user.getResetCodeExpiresAt().isAfter(LocalDateTime.now());
-        if (!usable || code == null) {
+        PasswordResetCode resetCode = resetCodeRepository.findByUserId(user.getId())
+                .orElseThrow(() -> new BadRequestException(INVALID_CODE));
+        if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            resetCodeRepository.delete(resetCode);
             throw new BadRequestException(INVALID_CODE);
         }
-        if (!passwordEncoder.matches(code, user.getResetCodeHash())) {
-            int attempts = (user.getResetCodeAttempts() == null ? 0 : user.getResetCodeAttempts()) + 1;
+        String code = trimToNull(request.getCode());
+        if (code == null || !passwordEncoder.matches(code, resetCode.getCodeHash())) {
+            int attempts = resetCode.getAttempts() + 1;
             if (attempts >= RESET_CODE_MAX_ATTEMPTS) {
-                clearResetCode(user);
-                repository.save(user);
+                resetCodeRepository.delete(resetCode);
                 throw new BadRequestException("Hubo demasiados intentos. Pedí un código nuevo.");
             }
-            user.setResetCodeAttempts(attempts);
-            repository.save(user);
+            resetCode.setAttempts(attempts);
+            resetCodeRepository.save(resetCode);
             throw new BadRequestException("El código no es correcto");
         }
         return user;
-    }
-
-    private void clearResetCode(User user) {
-        user.setResetCodeHash(null);
-        user.setResetCodeExpiresAt(null);
-        user.setResetCodeAttempts(null);
     }
 
     private Optional<User> findUser(String usernameOrEmail) {

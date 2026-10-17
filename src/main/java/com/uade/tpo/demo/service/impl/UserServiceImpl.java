@@ -69,7 +69,8 @@ public class UserServiceImpl implements UserService {
     public UserResponseDTO getUserById(Long userId, User requester) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
                 .orElseThrow(ResourceNotFoundException::new);
-        boolean full = isAdmin(requester) || requester.getId().equals(userId);
+        // requester es null cuando lo pide un invitado (la ruta es pública): ve el perfil reducido
+        boolean full = isAdmin(requester) || (requester != null && requester.getId().equals(userId));
         return toResponse(user, full);
     }
 

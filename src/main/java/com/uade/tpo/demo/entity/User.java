@@ -1,6 +1,5 @@
 package com.uade.tpo.demo.entity;
 
-import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
@@ -69,13 +68,7 @@ public class User implements UserDetails {
     @Builder.Default
     private boolean active = true;
 
-    // Recuperar contraseña: se guarda el hash del código (nunca el código en texto),
-    // cuándo vence y cuántas veces lo intentaron mal. Ver AuthenticationService.
-    private String resetCodeHash;
-
-    private LocalDateTime resetCodeExpiresAt;
-
-    private Integer resetCodeAttempts;
+    // El código de "Olvidé mi contraseña" vive en su propia tabla: ver PasswordResetCode.
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

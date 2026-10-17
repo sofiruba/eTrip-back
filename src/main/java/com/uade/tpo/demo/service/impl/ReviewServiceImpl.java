@@ -100,6 +100,8 @@ public class ReviewServiceImpl implements ReviewService {
 
         boolean completedBooking = bookingRepository.findByOrder_User_IdAndExperienceSession_Experience_Id(
                 currentUser.getId(), experience.getId()).stream()
+                // Una reserva reembolsada (o de una sesión cancelada) no habilita a reseñar
+                .filter(reviewBooking -> !reviewBooking.isRefunded())
                 .map(reviewBooking -> reviewBooking.getExperienceSession())
                 .filter(java.util.Objects::nonNull)
                 .map(ExperienceSession::getEndsAt)

@@ -5,6 +5,7 @@ import java.net.URI;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.uade.tpo.demo.dtos.request.DiscountCouponRequestDTO;
 import com.uade.tpo.demo.dtos.response.CouponValidationDTO;
 import com.uade.tpo.demo.dtos.response.DiscountCouponResponseDTO;
+import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.service.DiscountCouponService;
@@ -43,10 +45,13 @@ public class DiscountCouponsController {
         return ResponseEntity.ok(discountCouponService.getCoupons(pageRequest));
     }
 
-    // Chequea si un código de cupón es aplicable hoy. Siempre responde 200 (valid true/false + motivo).
+    // Chequea si un código de cupón es aplicable hoy para quien lo pide. Siempre responde 200
+    // (valid true/false + motivo: NOT_FOUND, INACTIVE, INVALID_PERCENTAGE, NOT_YET_VALID, EXPIRED, ALREADY_USED).
     @GetMapping("/validate")
-    public ResponseEntity<CouponValidationDTO> validateCoupon(@RequestParam String code) {
-        return ResponseEntity.ok(discountCouponService.validateCoupon(code));
+    public ResponseEntity<CouponValidationDTO> validateCoupon(
+            @RequestParam String code,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(discountCouponService.validateCoupon(code, currentUser));
     }
 
     // Un cupón puntual por id.

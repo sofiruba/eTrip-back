@@ -1,6 +1,7 @@
 package com.uade.tpo.demo.service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -17,6 +18,9 @@ public interface ExperienceSessionService {
     Page<ExperienceSessionResponseDTO> searchSessions(
             Long experienceId, Boolean onlyAvailable, LocalDateTime dateFrom, LocalDateTime dateTo, Pageable pageable)
             throws ResourceNotFoundException;
+
+    // Fechas que gestiona el usuario (ADMIN: todas; anfitrión: las suyas), incluidas pasadas y canceladas.
+    List<ExperienceSessionResponseDTO> getManagedSessions(User currentUser);
 
     // Un turno puntual por id.
     ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException;

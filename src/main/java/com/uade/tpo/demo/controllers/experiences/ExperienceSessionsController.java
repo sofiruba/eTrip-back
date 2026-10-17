@@ -2,6 +2,7 @@ package com.uade.tpo.demo.controllers.experiences;
 
 import java.net.URI;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -60,6 +61,15 @@ public class ExperienceSessionsController {
                 experienceId, onlyAvailable, null, null, pageRequest(page, size)));
     }
 
+    // Fechas que gestiona el usuario logueado, con pasadas y canceladas (calendario del anfitrión y panel de admin).
+    // ADMIN recibe todas; cualquier otro usuario, las de sus experiencias. Las listas públicas de arriba
+    // solo muestran fechas activas y futuras.
+    @GetMapping("/manage")
+    public ResponseEntity<List<ExperienceSessionResponseDTO>> getManagedSessions(
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(experienceSessionService.getManagedSessions(currentUser));
+    }
+
     // Un turno puntual por id.
     @GetMapping("/{sessionId}")
     public ResponseEntity<ExperienceSessionResponseDTO> getSessionById(@PathVariable Long sessionId)
@@ -87,7 +97,7 @@ public class ExperienceSessionsController {
         return ResponseEntity.ok(experienceSessionService.updateSession(sessionId, request, currentUser));
     }
 
-    // Borra un turno; falla si ya tiene reservas. Solo el dueño de la experiencia o un ADMIN.
+    // Cancela un turno futuro (baja lógica) y reembolsa sus reservas. Solo el dueño de la experiencia o un ADMIN.
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> deleteSession(
             @PathVariable Long sessionId,
