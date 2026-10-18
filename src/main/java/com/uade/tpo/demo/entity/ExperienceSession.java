@@ -16,15 +16,21 @@ import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.NoArgsConstructor;
 
 @Data
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
 @Table(name = "experience_sessions")
 public class ExperienceSession {
+    @EqualsAndHashCode.Include
+    @ToString.Include
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -44,6 +50,11 @@ public class ExperienceSession {
     @Column(nullable = false)
     @Builder.Default
     private boolean active = true;
+
+    /** true cuando la fecha ya terminó. Lo marca solo la tarea automática (AutomaticTasks). */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean finished = false;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "experience_id", nullable = false)

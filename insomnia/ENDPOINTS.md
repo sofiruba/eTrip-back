@@ -292,6 +292,7 @@ Ejemplo: `/experience-sessions?experienceId=1&onlyAvailable=true&dateFrom=2027-0
 | GET | `/reviews/mine?page=0&size=10` | — mis reseñas (igual que `GET /reviews` para un CLIENTE, queda como alias explícito) |
 | GET | `/reviews/{reviewId}` | — **CLIENTE: solo si es autor (`403` si no). ADMIN: cualquiera.** |
 | POST | `/reviews` | ver abajo |
+| PUT | `/reviews/{reviewId}/reply` | `{ "reply": "¡Gracias por venir!" }` — **solo el anfitrión de la experiencia o ADMIN**. Crea o edita la respuesta pública; `reply` vacío la borra. Avisa al autor con una notificación. |
 | DELETE | `/reviews/{reviewId}` | — (autor o ADMIN) |
 
 > **Por qué `/reviews/experience/{id}` queda pública y las demás no:** esas son las reseñas *de
@@ -343,6 +344,7 @@ el usuario logueado (`403` si no coincide y no sos ADMIN).
 | Método | Ruta | Body |
 |---|---|---|
 | GET | `/orders?page=0&size=10` | — (propias; ADMIN ve todas) |
+| GET | `/orders/stats` | — **solo ADMIN**: `{ orderCount, grossSales, refunded, netSales, commission, commissionRate }`. La comisión de PLAN es el 10% de las ventas netas (cobrado menos reembolsos). |
 | GET | `/orders/{orderId}` | — |
 | POST | `/orders` | opcional, ver abajo |
 
@@ -352,10 +354,16 @@ de cada experiencia (si tiene), crea la orden + una `Booking` con voucher por ca
 `availableSeats` y vacía el carrito. Body opcional:
 ```json
 {
-  "couponCode": "VERANO2026"
+  "couponCode": "VERANO2026",
+  "paymentMethod": "card",
+  "cardNumber": "4242424242424242"
 }
 ```
-O sin body / `{}` para no aplicar cupón.
+`couponCode` es opcional. **Pago simulado** (no hay cobro real): `paymentMethod` es `card` (tarjeta nueva,
+requiere `cardNumber` válido por Luhn), `saved` (tarjeta guardada) o una billetera (`mercadopago`, `paypal`,
+`gpay`); sin `paymentMethod` se aprueba directo (útil en Insomnia). La tarjeta de prueba `4000 0000 0000 0002`
+siempre es rechazada (`400` "El banco rechazó la tarjeta…") y en ese caso no se toca nada. Cada orden devuelve
+también `refunded` y `commission` (10% de PLAN).
 
 > Requiere que el carrito tenga items. Todo pasa en una transacción: si algo falla, no se descuenta
 > nada. Antes de validar, **bloquea las sesiones del carrito** (`SELECT ... FOR UPDATE`) y las vuelve

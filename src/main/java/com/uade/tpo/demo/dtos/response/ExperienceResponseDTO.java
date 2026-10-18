@@ -24,6 +24,8 @@ public class ExperienceResponseDTO {
     /** Precio ya con el descuento aplicado (igual a price si no hay descuento). */
     private BigDecimal finalPrice;
     private boolean active;
+    /** ACTIVE | PAUSED_NO_DATES (pausada sola por no tener fechas) | INACTIVE (pausada a mano). */
+    private String status;
 
     private String location;
 

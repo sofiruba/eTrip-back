@@ -55,7 +55,7 @@ public class AuthenticationService {
         if (username == null || email == null || trimToNull(request.getPassword()) == null
                 || trimToNull(request.getFirstname()) == null
                 || trimToNull(request.getLastname()) == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Completá usuario, nombre, apellido, email y contraseña");
         }
         if (request.getPassword().trim().length() < 6) {
             throw new BadRequestException("La contraseña debe tener al menos 6 caracteres");

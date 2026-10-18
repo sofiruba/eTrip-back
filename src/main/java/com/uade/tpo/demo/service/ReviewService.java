@@ -3,6 +3,7 @@ package com.uade.tpo.demo.service;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
+import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
 import com.uade.tpo.demo.entity.User;
@@ -32,4 +33,8 @@ public interface ReviewService {
     // Borra una reseña; solo el autor o un ADMIN.
     void deleteReview(Long reviewId, User currentUser)
             throws ResourceNotFoundException, ForbiddenException;
+
+    // Responde (o edita/borra la respuesta de) una reseña; solo el anfitrión de la experiencia o un ADMIN.
+    ReviewResponseDTO replyToReview(Long reviewId, ReviewReplyRequestDTO request, User currentUser)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
 }

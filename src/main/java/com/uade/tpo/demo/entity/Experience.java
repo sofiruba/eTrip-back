@@ -21,15 +21,21 @@ import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.NoArgsConstructor;
 
 @Data
+@EqualsAndHashCode(onlyExplicitlyIncluded = true)
+@ToString(onlyExplicitlyIncluded = true)
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Entity
 @Table(name = "experiences")
 public class Experience {
+    @EqualsAndHashCode.Include
+    @ToString.Include
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -53,6 +59,14 @@ public class Experience {
     @Column(nullable = false)
     @Builder.Default
     private boolean active = true;
+
+    /**
+     * true si la pausó la tarea automática por quedarse sin fechas futuras (AutomaticTasks).
+     * Se vuelve a publicar sola al agregarle una fecha. Una pausa manual del anfitrión o el admin lo deja en false.
+     */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean autoPaused = false;
 
     @OneToMany(mappedBy = "experience", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")

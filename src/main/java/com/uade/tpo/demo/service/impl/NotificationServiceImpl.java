@@ -34,9 +34,9 @@ public class NotificationServiceImpl implements NotificationService {
     public NotificationResponseDTO markRead(Long notificationId, User user)
             throws ResourceNotFoundException, ForbiddenException {
         Notification notification = notificationRepository.findById(notificationId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La notificación no existe"));
         if (notification.getUser() == null || !notification.getUser().getId().equals(user.getId())) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Esa notificación no es tuya");
         }
         notification.setRead(true);
         return toResponse(notificationRepository.save(notification));

@@ -5,6 +5,7 @@ import org.springframework.data.domain.Pageable;
 
 import com.uade.tpo.demo.dtos.request.OrderRequestDTO;
 import com.uade.tpo.demo.dtos.response.OrderResponseDTO;
+import com.uade.tpo.demo.dtos.response.OrderStatsDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -21,4 +22,11 @@ public interface OrderService {
     // Confirma el carrito del usuario y genera la orden con sus vouchers.
     OrderResponseDTO createOrder(User user, OrderRequestDTO request)
             throws ResourceNotFoundException, BadRequestException;
+
+    // Estadísticas de ventas y comisión de PLAN; solo ADMIN.
+    OrderStatsDTO getStats(User user) throws ForbiddenException;
+
+    // Cancela la orden: reembolsa todas sus reservas que todavía no empezaron; solo ADMIN.
+    OrderResponseDTO cancelOrder(Long orderId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
 }

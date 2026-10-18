@@ -135,7 +135,7 @@ public class ExperiencesController {
         try {
             return objectMapper.readValue(experienceJson, ExperienceRequestDTO.class);
         } catch (IOException e) {
-            throw new BadRequestException();
+            throw new BadRequestException("Los datos de la experiencia no tienen un formato válido");
         }
     }
 

@@ -41,7 +41,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(rollbackFor = Throwable.class)
     public CartResponseDTO getCartByUserId(Long userId) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
         // Busca el carrito del usuario; si no existe, lo crea vacío.
 
         Cart cart = cartRepository.findByUserId(userId)
@@ -99,7 +99,7 @@ public class CartServiceImpl implements CartService {
     public CartResponseDTO addItem(CartItemRequestDTO request)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         User user = userRepository.findById(request.getUserId())
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
 
         // Los ADMIN son para moderación, no compran experiencias.
         if (user.getRole() == Role.ADMIN) {
@@ -128,7 +128,7 @@ public class CartServiceImpl implements CartService {
 
          // Valida que la cantidad solicitada sea positiva.
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
-            throw new BadRequestException();
+            throw new BadRequestException("La cantidad de personas tiene que ser al menos 1");
         }
 
         // Busca el carrito del usuario; si no existe, lo crea vacío.
@@ -161,7 +161,7 @@ public class CartServiceImpl implements CartService {
         if (session.getAvailableSeats() == null
                 || newQuantity > session.getAvailableSeats()) {
 
-            throw new BadRequestException();
+            throw new BadRequestException(seatsMessage(session));
         }
 
         // Si no existía, crea un nuevo item; si ya existía, actualiza la cantidad.
@@ -187,17 +187,17 @@ public class CartServiceImpl implements CartService {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
 
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
 
         CartItem cartItem = cartItemRepository.findById(cartItemId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("Ese ítem ya no está en el carrito"));
 
         if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Ese ítem no es de tu carrito");
         }
 
         if (quantity == null || quantity <= 0) {
-            throw new BadRequestException();
+            throw new BadRequestException("La cantidad de personas tiene que ser al menos 1");
         }
 
         // Valida que la cantidad solicitada no supere los cupos disponibles de la sesión.
@@ -209,7 +209,7 @@ public class CartServiceImpl implements CartService {
         if (session.getAvailableSeats() == null
                 || quantity > session.getAvailableSeats()) {
 
-            throw new BadRequestException();
+            throw new BadRequestException(seatsMessage(session));
         }
 
         cartItem.setQuantity(quantity);
@@ -224,13 +224,13 @@ public class CartServiceImpl implements CartService {
     @Transactional(rollbackFor = Throwable.class)
     public void removeItem(Long userId, Long cartItemId) throws ResourceNotFoundException, ForbiddenException {
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
 
         CartItem cartItem = cartItemRepository.findById(cartItemId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("Ese ítem ya no está en el carrito"));
 
         if (!cartItem.getCart().getUser().getId().equals(user.getId())) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Ese ítem no es de tu carrito");
         }
 
         cartItemRepository.delete(cartItem);
@@ -241,7 +241,7 @@ public class CartServiceImpl implements CartService {
     @Transactional(rollbackFor = Throwable.class)
     public void clearCart(Long userId) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
 
         Cart cart = cartRepository.findByUserId(user.getId())
                 .orElse(null);
@@ -254,5 +254,14 @@ public class CartServiceImpl implements CartService {
         if (!items.isEmpty()) {
             cartItemRepository.deleteAll(items);
         }
+    }
+
+    // "Solo quedan 3 lugares" / "Se agotaron los lugares de esta fecha"
+    private String seatsMessage(ExperienceSession session) {
+        int seats = session.getAvailableSeats() == null ? 0 : session.getAvailableSeats();
+        if (seats == 0) {
+            return "Se agotaron los lugares de esta fecha";
+        }
+        return "Solo quedan " + seats + (seats == 1 ? " lugar" : " lugares") + " en esta fecha";
     }
 }

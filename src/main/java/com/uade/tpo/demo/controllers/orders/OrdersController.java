@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.request.OrderRequestDTO;
 import com.uade.tpo.demo.dtos.response.OrderResponseDTO;
+import com.uade.tpo.demo.dtos.response.OrderStatsDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -42,6 +43,21 @@ public class OrdersController {
                 : PageRequest.of(page, size);
 
         return ResponseEntity.ok(orderService.getOrders(user, pageRequest));
+    }
+
+    // Ventas, reembolsos y comisión de PLAN (10%); solo ADMIN.
+    @GetMapping("/stats")
+    public ResponseEntity<OrderStatsDTO> getStats(@AuthenticationPrincipal User user) throws ForbiddenException {
+        return ResponseEntity.ok(orderService.getStats(user));
+    }
+
+    // Cancela la orden entera (reembolsa sus reservas que todavía no empezaron); solo ADMIN.
+    @PostMapping("/{orderId}/cancel")
+    public ResponseEntity<OrderResponseDTO> cancelOrder(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok(orderService.cancelOrder(orderId, user));
     }
 
     // Una orden puntual; solo la ve el dueño o un ADMIN.

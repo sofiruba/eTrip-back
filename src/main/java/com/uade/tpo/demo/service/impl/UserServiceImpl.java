@@ -43,7 +43,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(rollbackFor = Throwable.class)
     public UserResponseDTO updateMyProfile(User currentUser, UserUpdateDTO request) throws BadRequestException {
         if (request == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Faltan los datos del perfil");
         }
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new IllegalStateException("Usuario autenticado inexistente"));
@@ -51,7 +51,7 @@ public class UserServiceImpl implements UserService {
         String firstName = trimToNull(request.getFirstName());
         String lastName = trimToNull(request.getLastName());
         if (firstName == null && lastName == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Completá el nombre o el apellido");
         }
         if (firstName != null) {
             user.setFirstName(firstName);
@@ -68,7 +68,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public UserResponseDTO getUserById(Long userId, User requester) throws ResourceNotFoundException {
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
         // requester es null cuando lo pide un invitado (la ruta es pública): ve el perfil reducido
         boolean full = isAdmin(requester) || (requester != null && requester.getId().equals(userId));
         return toResponse(user, full);
@@ -79,7 +79,7 @@ public class UserServiceImpl implements UserService {
     @Transactional(readOnly = true)
     public Page<UserResponseDTO> getUsers(User requester, Pageable pageable) throws ForbiddenException {
         if (!isAdmin(requester)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Solo un administrador puede ver los usuarios");
         }
         return userRepository.findAll(pageable).map(user -> toResponse(user, true));
     }
@@ -90,15 +90,15 @@ public class UserServiceImpl implements UserService {
     public UserResponseDTO updateRole(Long userId, String role, User requester)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         if (!isAdmin(requester)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Solo un administrador puede cambiar roles");
         }
         if (requester.getId().equals(userId)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("No podés cambiar tu propio rol");
         }
 
         Role newRole = parseRole(role);
         User user = userRepository.findById(userId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
         user.setRole(newRole);
 
         return toResponse(userRepository.save(user), true);
@@ -123,12 +123,12 @@ public class UserServiceImpl implements UserService {
 
     private Role parseRole(String role) throws BadRequestException {
         if (role == null || role.isBlank()) {
-            throw new BadRequestException();
+            throw new BadRequestException("El rol tiene que ser CLIENTE o ADMIN");
         }
         try {
             return Role.valueOf(role.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
-            throw new BadRequestException();
+            throw new BadRequestException("El rol tiene que ser CLIENTE o ADMIN");
         }
     }
 

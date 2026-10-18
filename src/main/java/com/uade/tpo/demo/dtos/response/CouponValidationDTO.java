@@ -21,4 +21,10 @@ public class CouponValidationDTO {
     private boolean valid;
     private String reason;
     private BigDecimal percentage;
+    /** Texto para mostrar si el cupón no sirve. */
+    private String message;
+    /** Montos calculados con el carrito actual del usuario. */
+    private BigDecimal subtotal;
+    private BigDecimal discountAmount;
+    private BigDecimal total;
 }

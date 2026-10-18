@@ -107,6 +107,16 @@ public class ExperienceSessionsController {
         return ResponseEntity.noContent().build();
     }
 
+    // Borra del todo una fecha cancelada o terminada (la saca del calendario).
+    @DeleteMapping("/{sessionId}/permanent")
+    public ResponseEntity<Void> removeSession(
+            @PathVariable Long sessionId,
+            @AuthenticationPrincipal User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        experienceSessionService.removeSession(sessionId, currentUser);
+        return ResponseEntity.noContent().build();
+    }
+
     private PageRequest pageRequest(Integer page, Integer size) {
         return page == null || size == null
                 ? PageRequest.of(0, Integer.MAX_VALUE)

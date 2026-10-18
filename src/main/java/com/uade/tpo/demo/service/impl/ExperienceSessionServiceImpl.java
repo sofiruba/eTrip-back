@@ -22,6 +22,7 @@ import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionSpecifications;
 import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.service.ExperienceSessionService;
 import com.uade.tpo.demo.service.NotificationService;
 
@@ -35,6 +36,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     private final ExperienceRepository experienceRepository;
     private final BookingRepository bookingRepository;
     private final NotificationService notificationService;
+    private final CartItemRepository cartItemRepository;
 
     // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
@@ -43,7 +45,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
             Long experienceId, Boolean onlyAvailable, LocalDateTime dateFrom, LocalDateTime dateTo,
             Pageable pageable) throws ResourceNotFoundException {
         if (experienceId != null && !experienceRepository.existsById(experienceId)) {
-            throw new ResourceNotFoundException();
+            throw new ResourceNotFoundException("La experiencia no existe");
         }
 
         return experienceSessionRepository
@@ -83,7 +85,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         validateCreateRequest(request);
 
         Experience experience = experienceRepository.findById(request.getExperienceId())
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La experiencia no existe"));
         assertCanManage(experience, currentUser);
 
         validateNoOverlap(experience.getId(), null, request.getStartsAt(), request.getEndsAt());
@@ -97,6 +99,12 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .build();
 
         ExperienceSession savedSession = experienceSessionRepository.save(session);
+
+        // Si la experiencia estaba pausada automáticamente por no tener fechas, con esta fecha se vuelve a publicar
+        if (experience.isAutoPaused()) {
+            experience.setActive(true);
+            experience.setAutoPaused(false);
+        }
         return mapToResponseDTO(savedSession);
     }
 
@@ -110,7 +118,10 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
         if (!session.isActive()) {
-            throw new BadRequestException("No se puede modificar una sesión inactiva");
+            throw new BadRequestException("No se puede modificar una fecha cancelada");
+        }
+        if (session.isFinished()) {
+            throw new BadRequestException("No se puede modificar una fecha que ya terminó");
         }
         assertCanManage(session.getExperience(), currentUser);
 
@@ -158,7 +169,10 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         assertCanManage(session.getExperience(), currentUser);
 
         if (!session.isActive()) {
-            throw new BadRequestException("La sesión ya está inactiva");
+            throw new BadRequestException("Esta fecha ya está cancelada");
+        }
+        if (session.isFinished()) {
+            throw new BadRequestException("No se puede cancelar una fecha que ya terminó");
         }
         if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
             throw new BadRequestException("No se puede cancelar una sesión que ya comenzó");
@@ -187,6 +201,28 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         experienceSessionRepository.save(session);
     }
 
+    // Borra del todo una fecha que ya no sirve (cancelada o terminada), en cascada: sus ítems de carrito,
+    // sus reservas y la fecha. Una fecha vigente primero se cancela (eso reembolsa a los compradores).
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public void removeSession(Long sessionId, User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        ExperienceSession session = experienceSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
+        assertCanManage(session.getExperience(), currentUser);
+
+        boolean ended = session.isFinished() || session.getStartsAt().isBefore(LocalDateTime.now());
+        if (session.isActive() && !ended) {
+            throw new BadRequestException("Esta fecha sigue vigente: primero cancelala (se reembolsa sola) y después la podés eliminar");
+        }
+
+        cartItemRepository.deleteByExperienceSessionId(sessionId);
+        if (session.getBookings() != null) {
+            bookingRepository.deleteAll(session.getBookings());
+        }
+        experienceSessionRepository.delete(session);
+    }
+
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {
         boolean isOwner = experience != null
                 && experience.getPublisher() != null
@@ -194,13 +230,13 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 && experience.getPublisher().getId().equals(currentUser.getId());
         boolean isAdmin = currentUser != null && currentUser.getRole() == Role.ADMIN;
         if (!isOwner && !isAdmin) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Solo el anfitrión de la experiencia puede gestionar sus fechas");
         }
     }
 
     private void validateCreateRequest(ExperienceSessionRequestDTO request) throws BadRequestException {
         if (request == null || request.getExperienceId() == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Falta la experiencia de la fecha");
         }
 
         validateDateRange(request.getStartsAt(), request.getEndsAt());
@@ -210,7 +246,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
     private void validateUpdateRequest(ExperienceSessionRequestDTO request) throws BadRequestException {
         if (request == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Faltan los datos de la fecha");
         }
 
         if (request.getCapacity() != null) {
@@ -277,6 +313,22 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .capacity(session.getCapacity())
                 .availableSeats(session.getAvailableSeats())
                 .active(session.isActive())
+                .status(status(session))
+                .editable(session.isActive() && !session.isFinished() && session.getStartsAt().isAfter(LocalDateTime.now()))
                 .build();
+    }
+
+    // Estado de la fecha para mostrar en el calendario: CANCELLED, FINISHED, SOLD_OUT o PUBLISHED.
+    private String status(ExperienceSession session) {
+        if (!session.isActive()) {
+            return "CANCELLED";
+        }
+        if (session.isFinished() || session.getStartsAt().isBefore(LocalDateTime.now())) {
+            return "FINISHED";
+        }
+        if (session.getAvailableSeats() == null || session.getAvailableSeats() == 0) {
+            return "SOLD_OUT";
+        }
+        return "PUBLISHED";
     }
 }

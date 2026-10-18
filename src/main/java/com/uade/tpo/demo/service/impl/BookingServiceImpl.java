@@ -61,12 +61,12 @@ public class BookingServiceImpl implements BookingService {
     public Page<BookingResponseDTO> getBookingsByExperience(Long experienceId, User requester, Pageable pageable)
             throws ResourceNotFoundException, ForbiddenException {
         Experience experience = experienceRepository.findById(experienceId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La experiencia no existe"));
 
         boolean isOwner = experience.getPublisher() != null
                 && experience.getPublisher().getId().equals(requester.getId());
         if (!isOwner && !isAdmin(requester)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Solo el anfitrión de la experiencia puede ver sus reservas");
         }
 
         return bookingRepository.findByExperienceSession_Experience_Id(experienceId, pageable)
@@ -79,7 +79,7 @@ public class BookingServiceImpl implements BookingService {
     public BookingResponseDTO getBookingById(Long bookingId, User user)
             throws ResourceNotFoundException, ForbiddenException {
         Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La reserva no existe"));
 
         Order order = booking.getOrder();
         // El comprador es el usuario que hizo la orden asociada a la reserva.
@@ -96,7 +96,7 @@ public class BookingServiceImpl implements BookingService {
 
         // Solo el comprador, el vendedor o un ADMIN pueden ver la reserva.
         if (!isBuyer && !isSeller && !isAdmin(user)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("No tenés acceso a esta reserva");
         }
 
         return toResponse(booking);
@@ -174,6 +174,7 @@ public class BookingServiceImpl implements BookingService {
                 .createdAt(booking.getCreatedAt())
                 .refunded(booking.isRefunded())
                 .refundedAt(booking.getRefundedAt())
+                .status(bookingStatus(booking, session))
                 .buyerId(buyer != null ? buyer.getId() : null)
                 .buyerName(fullName(buyer))
                 .build();
@@ -187,5 +188,15 @@ public class BookingServiceImpl implements BookingService {
         String last = user.getLastName() != null ? user.getLastName() : "";
         String name = (first + " " + last).trim();
         return name.isEmpty() ? user.getEmail() : name;
+    }
+
+    // Estado de la reserva: REFUNDED, COMPLETED (la fecha ya terminó) o CONFIRMED.
+    private String bookingStatus(Booking booking, ExperienceSession session) {
+        if (booking.isRefunded()) {
+            return "REFUNDED";
+        }
+        boolean ended = session != null
+                && (session.isFinished() || (session.getEndsAt() != null && session.getEndsAt().isBefore(LocalDateTime.now())));
+        return ended ? "COMPLETED" : "CONFIRMED";
     }
 }

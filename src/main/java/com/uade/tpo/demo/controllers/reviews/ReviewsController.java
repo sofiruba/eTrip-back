@@ -10,11 +10,13 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
 import com.uade.tpo.demo.entity.User;
@@ -87,6 +89,16 @@ public class ReviewsController {
             @AuthenticationPrincipal User currentUser) throws ResourceNotFoundException, BadRequestException {
         ReviewResponseDTO result = reviewService.createReview(request, currentUser);
         return ResponseEntity.created(URI.create("/reviews/" + result.getId())).body(result);
+    }
+
+    // Respuesta del anfitrión a una reseña (crear, editar o borrar con reply vacío).
+    @PutMapping("/{reviewId}/reply")
+    public ResponseEntity<ReviewResponseDTO> replyToReview(
+            @PathVariable Long reviewId,
+            @RequestBody ReviewReplyRequestDTO request,
+            @AuthenticationPrincipal User currentUser)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok(reviewService.replyToReview(reviewId, request, currentUser));
     }
 
     // Borra una reseña; solo el autor o un ADMIN.

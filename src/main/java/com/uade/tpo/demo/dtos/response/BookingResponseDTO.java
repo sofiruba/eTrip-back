@@ -25,6 +25,8 @@ public class BookingResponseDTO {
     private BigDecimal unitPrice;
     private LocalDateTime createdAt;
     private boolean refunded;
+    /** CONFIRMED | COMPLETED (la fecha ya terminó) | REFUNDED (lo calcula el back). */
+    private String status;
     private LocalDateTime refundedAt;
 
     /** Quien hizo la reserva. Util sobre todo para la vista de vendedor (/bookings/sales). */

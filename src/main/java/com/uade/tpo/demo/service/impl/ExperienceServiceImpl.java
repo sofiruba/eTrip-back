@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Iterator;
@@ -30,6 +31,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
+import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.ExperienceImage;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
@@ -37,10 +39,13 @@ import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSpecifications;
+import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.ExperienceService;
 
@@ -59,6 +64,9 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final ExperienceCategoryRepository experienceCategoryRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
     private final UserRepository userRepository;
+    private final ReviewRepository reviewRepository;
+    private final BookingRepository bookingRepository;
+    private final CartItemRepository cartItemRepository;
 
     // Lista las experiencias publicadas; las inactivas se reservan para gestión.
     @Override
@@ -92,11 +100,11 @@ public class ExperienceServiceImpl implements ExperienceService {
         }
         if (filter.getMinPrice() != null && filter.getMaxPrice() != null
                 && filter.getMinPrice().compareTo(filter.getMaxPrice()) > 0) {
-            throw new BadRequestException();
+            throw new BadRequestException("El precio mínimo no puede ser mayor al máximo");
         }
         if (filter.getDateFrom() != null && filter.getDateTo() != null
                 && filter.getDateFrom().isAfter(filter.getDateTo())) {
-            throw new BadRequestException();
+            throw new BadRequestException("La fecha desde no puede ser posterior a la fecha hasta");
         }
 
         return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive), pageable)
@@ -116,7 +124,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             throws ResourceNotFoundException {
         Experience experience = findExperience(experienceId);
         if (!experience.isActive() && !canManage(experience, currentUser)) {
-            throw new ResourceNotFoundException();
+            throw new ResourceNotFoundException("Esta experiencia no está disponible");
         }
         return toResponse(experience);
     }
@@ -130,17 +138,17 @@ public class ExperienceServiceImpl implements ExperienceService {
         validateData(request);
         List<MultipartFile> validImages = nonEmptyImages(images);
         if (publisherId == null || validImages.isEmpty()) {
-            throw new BadRequestException();
+            throw new BadRequestException("Subí al menos una foto de la experiencia");
         }
 
         User publisher = userRepository.findById(publisherId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
         ExperienceCategory category = experienceCategoryRepository.findById(request.getCategoryId())
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La categoría elegida no existe"));
 
         String title = request.getTitle().trim();
         if (experienceRepository.existsByPublisherIdAndTitleIgnoreCase(publisherId, title)) {
-            throw new BadRequestException();
+            throw new BadRequestException("Ya publicaste una experiencia con ese título");
         }
 
         Experience experience = Experience.builder()
@@ -170,7 +178,7 @@ public class ExperienceServiceImpl implements ExperienceService {
 
         if (!request.getCategoryId().equals(experience.getCategory().getId())) {
             ExperienceCategory category = experienceCategoryRepository.findById(request.getCategoryId())
-                    .orElseThrow(ResourceNotFoundException::new);
+                    .orElseThrow(() -> new ResourceNotFoundException("La categoría elegida no existe"));
             experience.setCategory(category);
         }
 
@@ -178,7 +186,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         Long publisherId = experience.getPublisher() != null ? experience.getPublisher().getId() : null;
         if (publisherId != null
                 && experienceRepository.existsByPublisherIdAndTitleIgnoreCaseAndIdNot(publisherId, title, experienceId)) {
-            throw new BadRequestException();
+            throw new BadRequestException("Ya publicaste una experiencia con ese título");
         }
         experience.setTitle(title);
         experience.setDescription(trimToNull(request.getDescription()));
@@ -210,7 +218,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             experience.setDiscountPercentage(null);
         } else {
             if (discountPercentage.signum() < 0 || discountPercentage.compareTo(BigDecimal.valueOf(100)) >= 0) {
-                throw new BadRequestException();
+                throw new BadRequestException("El descuento tiene que estar entre 0 y 99%");
             }
             experience.setDiscountPercentage(discountPercentage);
         }
@@ -218,7 +226,9 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
-    // Borra una experiencia; falla si tiene sesiones asociadas. Solo el dueño o un ADMIN.
+    // Borra una experiencia en cascada: sus reseñas, sus fechas, las reservas de esas fechas y los ítems de carrito.
+    // Solo el dueño o un ADMIN. Si alguien tiene una reserva vigente para una fecha que todavía no pasó, no se borra
+    // (primero hay que cancelar esa fecha, que reembolsa a los compradores).
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteExperience(Long experienceId, User currentUser)
@@ -226,17 +236,29 @@ public class ExperienceServiceImpl implements ExperienceService {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
 
-        if (experience.getSessions() != null && !experience.getSessions().isEmpty()) {
-            boolean hasBookings = experience.getSessions().stream()
-                    .anyMatch(session -> session.getBookings() != null && !session.getBookings().isEmpty());
-            if (hasBookings) {
-                throw new BadRequestException(
-                        "No se puede eliminar una experiencia que tiene reservas. Reembolsá las reservas y conservá el historial.");
-            }
-            experienceSessionRepository.deleteAll(experience.getSessions());
-            experience.getSessions().clear();
+        List<ExperienceSession> sessions = experience.getSessions() != null ? experience.getSessions() : List.of();
+
+        // Reservas vigentes de fechas futuras: no se borran (sería quitarle la compra a alguien sin devolverle la plata)
+        LocalDateTime now = LocalDateTime.now();
+        boolean hasUpcomingBookings = sessions.stream()
+                .filter(session -> session.isActive() && session.getStartsAt().isAfter(now))
+                .flatMap(session -> session.getBookings().stream())
+                .anyMatch(booking -> !booking.isRefunded());
+        if (hasUpcomingBookings) {
+            throw new BadRequestException("Tiene reservas para fechas que todavía no pasaron. Cancelá esas fechas "
+                    + "(se reembolsan solas) y después la podés eliminar.");
         }
 
+        // Cascada: reseñas → por cada fecha, sus ítems de carrito y sus reservas → las fechas → la experiencia.
+        // Las fotos se borran solas (cascade = ALL en Experience.images).
+        if (experience.getReviews() != null) {
+            reviewRepository.deleteAll(experience.getReviews());
+        }
+        for (ExperienceSession session : sessions) {
+            cartItemRepository.deleteByExperienceSessionId(session.getId());
+            bookingRepository.deleteAll(session.getBookings());
+        }
+        experienceSessionRepository.deleteAll(sessions);
         experienceRepository.delete(experience);
     }
 
@@ -247,23 +269,25 @@ public class ExperienceServiceImpl implements ExperienceService {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
         experience.setActive(active);
+        // Una pausa o activación manual reemplaza a la automática: agregar fechas ya no la reactiva sola
+        experience.setAutoPaused(false);
         return toResponse(experienceRepository.save(experience));
     }
 
     private Experience findExperience(Long experienceId) throws ResourceNotFoundException {
         return experienceRepository.findById(experienceId)
-                .orElseThrow(ResourceNotFoundException::new);
+                .orElseThrow(() -> new ResourceNotFoundException("La experiencia no existe"));
     }
 
     private void validateCategoryExists(Long categoryId) throws ResourceNotFoundException {
         if (!experienceCategoryRepository.existsById(categoryId)) {
-            throw new ResourceNotFoundException();
+            throw new ResourceNotFoundException("La categoría elegida no existe");
         }
     }
 
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {
         if (!canManage(experience, currentUser)) {
-            throw new ForbiddenException();
+            throw new ForbiddenException("Solo el anfitrión de la experiencia puede modificarla");
         }
     }
 
@@ -277,16 +301,16 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     private void validateData(ExperienceRequestDTO request) throws BadRequestException {
         if (request == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Faltan los datos de la experiencia");
         }
         if (request.getTitle() == null || request.getTitle().isBlank()) {
-            throw new BadRequestException();
+            throw new BadRequestException("La experiencia necesita un título");
         }
         if (request.getPrice() == null || request.getPrice().signum() <= 0) {
-            throw new BadRequestException();
+            throw new BadRequestException("El precio tiene que ser mayor a 0");
         }
         if (request.getCategoryId() == null) {
-            throw new BadRequestException();
+            throw new BadRequestException("Elegí una categoría");
         }
         if (request.getLocation() == null || request.getLocation().isBlank()
                 || request.getLocation().split(",").length < 2
@@ -402,6 +426,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .discountPercentage(experience.getDiscountPercentage())
                 .finalPrice(experience.getEffectivePrice())
                 .active(experience.isActive())
+                .status(experience.isActive() ? "ACTIVE" : experience.isAutoPaused() ? "PAUSED_NO_DATES" : "INACTIVE")
                 .location(experience.getLocation())
                 .imagesBase64(imagesBase64)
                 .categoryId(experience.getCategory() != null ? experience.getCategory().getId() : null)

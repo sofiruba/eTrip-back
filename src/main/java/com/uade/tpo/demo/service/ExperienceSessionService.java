@@ -36,4 +36,8 @@ public interface ExperienceSessionService {
     // Da de baja logicamente un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
     void deleteSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
+
+    // Borra del todo una fecha cancelada o ya terminada (con sus reservas e ítems de carrito).
+    void removeSession(Long sessionId, User currentUser)
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 }

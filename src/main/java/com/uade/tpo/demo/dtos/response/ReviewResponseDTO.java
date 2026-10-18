@@ -20,4 +20,8 @@ public class ReviewResponseDTO {
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;
+    private Long hostId;
+    private String hostName;
+    private String hostReply;
+    private LocalDateTime hostReplyAt;
 }
