@@ -1,5 +1,6 @@
 package com.uade.tpo.demo.entity;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
@@ -38,6 +39,14 @@ public class Booking {
 
     @Column
     private Integer quantity;
+
+    /**
+     * Precio por persona que se pagó (con el descuento de la experiencia, sin el cupón). Se guarda al comprar
+     * para que editar el precio después no cambie el voucher, los reembolsos ni las estadísticas.
+     * Null en reservas viejas (anteriores a este campo): ahí se usa el precio actual.
+     */
+    @Column(precision = 19, scale = 2)
+    private BigDecimal unitPrice;
 
     @Column
     private LocalDateTime createdAt;

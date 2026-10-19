@@ -17,7 +17,9 @@ import java.util.List;
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import javax.imageio.ImageWriteParam;
+import javax.imageio.ImageReader;
 import javax.imageio.ImageWriter;
+import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
 
 import org.springframework.data.domain.Page;
@@ -59,6 +61,13 @@ public class ExperienceServiceImpl implements ExperienceService {
     private static final int IMAGE_MAX_DIMENSION = 1600;
     // Calidad JPEG (0 a 1) usada al recomprimir las fotos subidas.
     private static final float IMAGE_JPEG_QUALITY = 0.75f;
+    // Mismos límites que el editor del front (PhotoPicker): hasta 5 fotos de hasta 5 MB.
+    private static final int MAX_IMAGES = 5;
+    private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
+    // Una foto de pocos KB puede declarar 30000x30000 px y pedir GB de memoria al decodificarla:
+    // se miran las dimensiones antes de leerla y se rechaza lo que pase de este tope (40 megapíxeles).
+    private static final long MAX_SOURCE_PIXELS = 40_000_000L;
+    private static final String INVALID_IMAGE = "Una de las fotos no es una imagen válida. Usá JPG, PNG o WEBP.";
 
     private final ExperienceRepository experienceRepository;
     private final ExperienceCategoryRepository experienceCategoryRepository;
@@ -69,12 +78,13 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final CartItemRepository cartItemRepository;
 
     // Lista las experiencias publicadas; las inactivas se reservan para gestión.
+    // Los listados mandan solo la portada: todas las fotos de todas las experiencias hacían pesadísimo el inicio.
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> getExperiences(Pageable pageable) {
         return experienceRepository.findAll(
                 (root, query, criteriaBuilder) -> criteriaBuilder.isTrue(root.get("active")),
-                pageable).map(this::toResponse);
+                pageable).map(this::toListResponse);
     }
 
     // Busca experiencias combinando filtros opcionales (categoría, precio, ubicación, fechas, etc).
@@ -91,7 +101,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             boolean includeInactive) throws ResourceNotFoundException, BadRequestException {
         if (filter == null) {
             return includeInactive
-                    ? experienceRepository.findAll(pageable).map(this::toResponse)
+                    ? experienceRepository.findAll(pageable).map(this::toListResponse)
                     : getExperiences(pageable);
         }
 
@@ -108,7 +118,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         }
 
         return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive), pageable)
-                .map(this::toResponse);
+                .map(this::toListResponse);
     }
 
     // Una experiencia puntual por id.
@@ -217,8 +227,9 @@ public class ExperienceServiceImpl implements ExperienceService {
         if (discountPercentage == null || discountPercentage.signum() == 0) {
             experience.setDiscountPercentage(null);
         } else {
-            if (discountPercentage.signum() < 0 || discountPercentage.compareTo(BigDecimal.valueOf(100)) >= 0) {
-                throw new BadRequestException("El descuento tiene que estar entre 0 y 99%");
+            // Mismo tope que el front (editor y DiscountModal)
+            if (discountPercentage.signum() < 0 || discountPercentage.compareTo(BigDecimal.valueOf(90)) > 0) {
+                throw new BadRequestException("El descuento tiene que estar entre 0 y 90%");
             }
             experience.setDiscountPercentage(discountPercentage);
         }
@@ -226,9 +237,10 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
-    // Borra una experiencia en cascada: sus reseñas, sus fechas, las reservas de esas fechas y los ítems de carrito.
-    // Solo el dueño o un ADMIN. Si alguien tiene una reserva vigente para una fecha que todavía no pasó, no se borra
-    // (primero hay que cancelar esa fecha, que reembolsa a los compradores).
+    // Borra una experiencia en cascada: sus reseñas, sus fechas y los ítems de carrito. Solo el dueño o un ADMIN.
+    // Si alguna vez se vendió (tiene reservas, aunque sean de fechas pasadas o reembolsadas) no se borra: esas reservas
+    // son los vouchers y el historial de compra de otras personas, y las órdenes y las estadísticas dependen de ellas.
+    // En ese caso se pausa (PATCH /experiences/{id}/status?active=false).
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteExperience(Long experienceId, User currentUser)
@@ -238,25 +250,20 @@ public class ExperienceServiceImpl implements ExperienceService {
 
         List<ExperienceSession> sessions = experience.getSessions() != null ? experience.getSessions() : List.of();
 
-        // Reservas vigentes de fechas futuras: no se borran (sería quitarle la compra a alguien sin devolverle la plata)
-        LocalDateTime now = LocalDateTime.now();
-        boolean hasUpcomingBookings = sessions.stream()
-                .filter(session -> session.isActive() && session.getStartsAt().isAfter(now))
-                .flatMap(session -> session.getBookings().stream())
-                .anyMatch(booking -> !booking.isRefunded());
-        if (hasUpcomingBookings) {
-            throw new BadRequestException("Tiene reservas para fechas que todavía no pasaron. Cancelá esas fechas "
-                    + "(se reembolsan solas) y después la podés eliminar.");
+        boolean hasBookings = sessions.stream()
+                .anyMatch(session -> session.getBookings() != null && !session.getBookings().isEmpty());
+        if (hasBookings) {
+            throw new BadRequestException("Esta experiencia ya tuvo reservas y los compradores conservan sus vouchers, "
+                    + "así que no se puede eliminar. Podés desactivarla para que no se vea más en el catálogo.");
         }
 
-        // Cascada: reseñas → por cada fecha, sus ítems de carrito y sus reservas → las fechas → la experiencia.
+        // Cascada: reseñas → por cada fecha, sus ítems de carrito → las fechas → la experiencia.
         // Las fotos se borran solas (cascade = ALL en Experience.images).
         if (experience.getReviews() != null) {
             reviewRepository.deleteAll(experience.getReviews());
         }
         for (ExperienceSession session : sessions) {
             cartItemRepository.deleteByExperienceSessionId(session.getId());
-            bookingRepository.deleteAll(session.getBookings());
         }
         experienceSessionRepository.deleteAll(sessions);
         experienceRepository.delete(experience);
@@ -306,6 +313,16 @@ public class ExperienceServiceImpl implements ExperienceService {
         if (request.getTitle() == null || request.getTitle().isBlank()) {
             throw new BadRequestException("La experiencia necesita un título");
         }
+        // Topes de las columnas de la base (si no, un texto largo terminaba en un error 500)
+        if (request.getTitle().trim().length() > 150) {
+            throw new BadRequestException("El título puede tener hasta 150 caracteres");
+        }
+        if (request.getDescription() != null && request.getDescription().trim().length() > 2000) {
+            throw new BadRequestException("La descripción puede tener hasta 2000 caracteres");
+        }
+        if (request.getLocation() != null && request.getLocation().trim().length() > 200) {
+            throw new BadRequestException("La ubicación puede tener hasta 200 caracteres");
+        }
         if (request.getPrice() == null || request.getPrice().signum() <= 0) {
             throw new BadRequestException("El precio tiene que ser mayor a 0");
         }
@@ -319,27 +336,34 @@ public class ExperienceServiceImpl implements ExperienceService {
         }
     }
 
-    private List<MultipartFile> nonEmptyImages(List<MultipartFile> images) {
+    // Las fotos que vinieron con contenido, validando cantidad y peso (el front también lo hace, pero se puede saltear).
+    private List<MultipartFile> nonEmptyImages(List<MultipartFile> images) throws BadRequestException {
         if (images == null) {
             return List.of();
         }
         List<MultipartFile> result = new ArrayList<>();
         for (MultipartFile image : images) {
             if (image != null && !image.isEmpty()) {
+                if (image.getSize() > MAX_IMAGE_BYTES) {
+                    throw new BadRequestException("Cada foto puede pesar hasta 5 MB");
+                }
                 result.add(image);
             }
+        }
+        if (result.size() > MAX_IMAGES) {
+            throw new BadRequestException("Podés subir hasta " + MAX_IMAGES + " fotos");
         }
         return result;
     }
 
     // Convierte los archivos subidos en entidades ExperienceImage, comprimiendo cada una.
     private List<ExperienceImage> toImageEntities(List<MultipartFile> images, Experience experience)
-            throws IOException {
+            throws IOException, BadRequestException {
         List<ExperienceImage> result = new ArrayList<>();
         int position = 0;
         for (MultipartFile image : images) {
             result.add(ExperienceImage.builder()
-                    .image(compressImage(image.getBytes()))
+                    .image(prepareImage(image.getBytes()))
                     .position(position++)
                     .experience(experience)
                     .build());
@@ -347,15 +371,58 @@ public class ExperienceServiceImpl implements ExperienceService {
         return result;
     }
 
-    // Redimensiona y recomprime a JPEG antes de guardar como BLOB, así las fotos de celular no
-    // inflan la tabla ni la respuesta en base64. Si no se puede decodificar, guarda el original.
-    private byte[] compressImage(byte[] original) {
-        try {
-            BufferedImage source = ImageIO.read(new ByteArrayInputStream(original));
-            if (source == null) {
-                return original;
-            }
+    // Deja la foto lista para guardar: rechaza lo que no es una imagen y achica/recomprime el resto.
+    // WEBP se guarda tal cual porque Java no lo sabe decodificar (y el front ya lo limita a 5 MB).
+    private byte[] prepareImage(byte[] original) throws BadRequestException {
+        if (isWebp(original)) {
+            return original;
+        }
+        return compressImage(readImageSafely(original), original);
+    }
 
+    // "RIFF....WEBP" al principio del archivo
+    private boolean isWebp(byte[] bytes) {
+        return bytes.length > 12
+                && bytes[0] == 'R' && bytes[1] == 'I' && bytes[2] == 'F' && bytes[3] == 'F'
+                && bytes[8] == 'W' && bytes[9] == 'E' && bytes[10] == 'B' && bytes[11] == 'P';
+    }
+
+    // Lee la imagen mirando antes ancho y alto (están en el encabezado), así una "bomba" chica que declara
+    // dimensiones enormes se rechaza sin reservar la memoria que pediría decodificarla.
+    private BufferedImage readImageSafely(byte[] original) throws BadRequestException {
+        try (ImageInputStream input = ImageIO.createImageInputStream(new ByteArrayInputStream(original))) {
+            Iterator<ImageReader> readers = input != null ? ImageIO.getImageReaders(input) : null;
+            if (readers == null || !readers.hasNext()) {
+                throw new BadRequestException(INVALID_IMAGE);
+            }
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input, true, true);
+                long width = reader.getWidth(0);
+                long height = reader.getHeight(0);
+                if (width <= 0 || height <= 0) {
+                    throw new BadRequestException(INVALID_IMAGE);
+                }
+                if (width * height > MAX_SOURCE_PIXELS) {
+                    throw new BadRequestException("Una de las fotos tiene una resolución demasiado grande. Achicala y probá de nuevo.");
+                }
+                BufferedImage image = reader.read(0);
+                if (image == null) {
+                    throw new BadRequestException(INVALID_IMAGE);
+                }
+                return image;
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException e) {
+            throw new BadRequestException(INVALID_IMAGE);
+        }
+    }
+
+    // Redimensiona y recomprime a JPEG antes de guardar como BLOB, así las fotos de celular no
+    // inflan la tabla ni la respuesta en base64. Si no se puede recomprimir, guarda el original.
+    private byte[] compressImage(BufferedImage source, byte[] original) {
+        try {
             int width = source.getWidth();
             int height = source.getHeight();
             double scale = Math.min(1.0, (double) IMAGE_MAX_DIMENSION / Math.max(width, height));
@@ -403,6 +470,15 @@ public class ExperienceServiceImpl implements ExperienceService {
 
     // Arma el DTO de respuesta, incluyendo rating promedio y fotos en base64.
     private ExperienceResponseDTO toResponse(Experience experience) {
+        return toResponse(experience, true);
+    }
+
+    // Versión para listados: solo la portada (las tarjetas usan la primera foto; el detalle pide la experiencia por id).
+    private ExperienceResponseDTO toListResponse(Experience experience) {
+        return toResponse(experience, false);
+    }
+
+    private ExperienceResponseDTO toResponse(Experience experience, boolean allImages) {
         List<Review> reviews = experience.getReviews();
         int reviewCount = reviews != null ? reviews.size() : 0;
         Double averageRating = reviewCount > 0
@@ -414,6 +490,9 @@ public class ExperienceServiceImpl implements ExperienceService {
             for (ExperienceImage image : experience.getImages()) {
                 if (image.getImage() != null) {
                     imagesBase64.add(Base64.getEncoder().encodeToString(image.getImage()));
+                    if (!allImages) {
+                        break;
+                    }
                 }
             }
         }

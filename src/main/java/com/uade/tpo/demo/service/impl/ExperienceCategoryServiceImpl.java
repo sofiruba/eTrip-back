@@ -50,7 +50,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
 
         ExperienceCategory category = ExperienceCategory.builder()
                 .name(name)
-                .description(trimToNull(request.getDescription()))
+                .description(description(request.getDescription()))
                 .build();
 
         return toResponse(experienceCategoryRepository.save(category));
@@ -71,7 +71,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
         }
 
         category.setName(name);
-        category.setDescription(trimToNull(request.getDescription()));
+        category.setDescription(description(request.getDescription()));
 
         return toResponse(experienceCategoryRepository.save(category));
     }
@@ -96,7 +96,18 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
         if (name == null || name.isBlank()) {
             throw new BadRequestException("El nombre de la categoria es obligatorio");
         }
+        if (name.trim().length() > 100) {
+            throw new BadRequestException("El nombre de la categoria puede tener hasta 100 caracteres");
+        }
         return name.trim();
+    }
+
+    private String description(String description) throws BadRequestException {
+        String value = trimToNull(description);
+        if (value != null && value.length() > 255) {
+            throw new BadRequestException("La descripción de la categoria puede tener hasta 255 caracteres");
+        }
+        return value;
     }
 
     private String trimToNull(String value) {

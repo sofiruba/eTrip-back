@@ -41,10 +41,10 @@ public final class ExperienceSpecifications {
                 predicates.add(cb.equal(root.get("publisher").get("id"), f.getPublisherId()));
             }
             if (hasText(f.getTitle())) {
-                predicates.add(cb.like(cb.lower(root.get("title")), contains(f.getTitle())));
+                predicates.add(cb.like(cb.lower(root.get("title")), contains(f.getTitle()), LIKE_ESCAPE));
             }
             if (hasText(f.getLocation())) {
-                predicates.add(cb.like(cb.lower(root.get("location")), contains(f.getLocation())));
+                predicates.add(cb.like(cb.lower(root.get("location")), contains(f.getLocation()), LIKE_ESCAPE));
             }
             if (f.getMinPrice() != null) {
                 predicates.add(cb.greaterThanOrEqualTo(root.get("price"), f.getMinPrice()));
@@ -82,7 +82,14 @@ public final class ExperienceSpecifications {
         return value != null && !value.isBlank();
     }
 
+    // Lo que escribe el usuario se busca literal: "%" o "_" no funcionan como comodines del LIKE
+    private static final char LIKE_ESCAPE = '!';
+
     private static String contains(String value) {
-        return "%" + value.trim().toLowerCase() + "%";
+        String literal = value.trim().toLowerCase()
+                .replace("!", "!!")
+                .replace("%", "!%")
+                .replace("_", "!_");
+        return "%" + literal + "%";
     }
 }

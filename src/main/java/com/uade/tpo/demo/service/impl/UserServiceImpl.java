@@ -53,6 +53,9 @@ public class UserServiceImpl implements UserService {
         if (firstName == null && lastName == null) {
             throw new BadRequestException("Completá el nombre o el apellido");
         }
+        if ((firstName != null && firstName.length() > 100) || (lastName != null && lastName.length() > 100)) {
+            throw new BadRequestException("El nombre y el apellido pueden tener hasta 100 caracteres");
+        }
         if (firstName != null) {
             user.setFirstName(firstName);
         }
@@ -144,19 +147,19 @@ public class UserServiceImpl implements UserService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    // Arma el DTO; includePrivate agrega email y contadores (solo para el dueño o ADMIN).
+    // Arma el DTO; includePrivate agrega rol, estado, email y contadores (solo para el dueño o ADMIN).
     private UserResponseDTO toResponse(User user, boolean includePrivate) {
         UserResponseDTO.UserResponseDTOBuilder builder = UserResponseDTO.builder()
                 .id(user.getId())
                 .username(user.getDisplayUsername())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .role(user.getRole() != null ? user.getRole().name() : null)
-                .active(user.isActive())
                 .publishedExperiences(experienceRepository.countByPublisherId(user.getId()));
 
         if (includePrivate) {
-            builder.email(user.getEmail())
+            builder.role(user.getRole() != null ? user.getRole().name() : null)
+                    .active(user.isActive())
+                    .email(user.getEmail())
                     .bookingsCount(orderRepository.countByUserId(user.getId()))
                     .reviewsCount(reviewRepository.countByUserId(user.getId()));
         }

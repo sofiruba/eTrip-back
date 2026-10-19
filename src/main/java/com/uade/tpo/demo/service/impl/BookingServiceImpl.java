@@ -23,6 +23,8 @@ import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.service.BookingService;
 import com.uade.tpo.demo.service.NotificationService;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -36,6 +38,7 @@ public class BookingServiceImpl implements BookingService {
     private final ExperienceRepository experienceRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
     private final NotificationService notificationService;
+    private final EntityManager entityManager;
 
     // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
@@ -119,6 +122,12 @@ public class BookingServiceImpl implements BookingService {
         if (!isBuyer && !isSeller && !isAdmin(user)) {
             throw new ForbiddenException("Solo el comprador, el anfitrión o un administrador pueden cancelar la reserva");
         }
+        // Bloquea la fecha y la reserva hasta terminar y las vuelve a leer (SELECT ... FOR UPDATE), en el mismo orden
+        // que cancelar una fecha: dos pedidos de reembolso a la vez (doble clic) ya no suman los lugares dos veces.
+        if (session != null) {
+            entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
+        }
+        entityManager.refresh(booking, LockModeType.PESSIMISTIC_WRITE);
         if (booking.isRefunded()) {
             throw new BadRequestException("La reserva ya fue reembolsada");
         }
@@ -170,7 +179,7 @@ public class BookingServiceImpl implements BookingService {
                 .startsAt(session != null ? session.getStartsAt() : null)
                 .endsAt(session != null ? session.getEndsAt() : null)
                 .quantity(booking.getQuantity())
-                .unitPrice(experience != null ? experience.getEffectivePrice() : null)
+                .unitPrice(paidUnitPrice(booking, experience))
                 .createdAt(booking.getCreatedAt())
                 .refunded(booking.isRefunded())
                 .refundedAt(booking.getRefundedAt())
@@ -178,6 +187,14 @@ public class BookingServiceImpl implements BookingService {
                 .buyerId(buyer != null ? buyer.getId() : null)
                 .buyerName(fullName(buyer))
                 .build();
+    }
+
+    // El precio que se pagó (guardado al comprar). Las reservas anteriores a ese campo usan el precio actual.
+    static java.math.BigDecimal paidUnitPrice(Booking booking, Experience experience) {
+        if (booking.getUnitPrice() != null) {
+            return booking.getUnitPrice();
+        }
+        return experience != null ? experience.getEffectivePrice() : null;
     }
 
     private String fullName(User user) {

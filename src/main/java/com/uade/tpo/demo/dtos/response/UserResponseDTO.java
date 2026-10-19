@@ -14,8 +14,9 @@ public class UserResponseDTO {
     private String username;
     private String firstName;
     private String lastName;
+    /** Rol y estado: solo en el propio perfil o para ADMIN (así no se puede buscar quién es admin recorriendo ids). */
     private String role;
-    private boolean active;
+    private Boolean active;
 
     /** Solo se completa si el que consulta es el mismo usuario o un ADMIN. */
     private String email;

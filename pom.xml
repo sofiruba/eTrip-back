@@ -17,7 +17,7 @@
 		<java.version>17</java.version>
 		<spring-security.version>6.3.0</spring-security.version>
 		<spring.version>6.1.7</spring.version>
-		<lombok.version>1.18.36</lombok.version>
+		<lombok.version>1.18.46</lombok.version>
 	</properties>
 	<dependencies>
 

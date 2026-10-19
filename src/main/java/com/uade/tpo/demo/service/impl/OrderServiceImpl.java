@@ -160,6 +160,10 @@ public class OrderServiceImpl implements OrderService {
         // Pago simulado: se valida antes de tocar cupos, así un rechazo no cambia nada.
         simulatePayment(request);
 
+        // Valida y resuelve el cupón del request (si viene) y que este usuario no lo haya usado ya en una orden anterior.
+        // Va primero porque bloquea el cupón: así el chequeo de "ya lo usaste" ve las compras que terminaron mientras esperaba.
+        DiscountCoupon coupon = resolveCoupon(request, user);
+
         Cart cart = cartRepository.findByUserId(user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("No se puede confirmar una compra con el carrito vacío"));
 
@@ -203,8 +207,6 @@ public class OrderServiceImpl implements OrderService {
             subtotal = subtotal.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
-        // Valida y resuelve el cupón del request (si viene) y que este usuario no lo haya usado ya en una orden anterior.
-        DiscountCoupon coupon = resolveCoupon(request, user);
         BigDecimal discountAmount = BigDecimal.ZERO;
         if (coupon != null) {
             discountAmount = subtotal
@@ -212,6 +214,14 @@ public class OrderServiceImpl implements OrderService {
                     .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         }
         BigDecimal total = subtotal.subtract(discountAmount);
+
+        // Si el front dice cuánto le mostró al comprador y no coincide (el anfitrión cambió un precio mientras
+        // pagaba), no se cobra un monto distinto sin avisar.
+        if (request != null && request.getExpectedTotal() != null
+                && request.getExpectedTotal().subtract(total).abs().compareTo(new BigDecimal("0.01")) > 0) {
+            throw new BadRequestException("El precio de alguna experiencia cambió mientras pagabas. "
+                    + "Revisá el nuevo total y confirmá de nuevo.");
+        }
         long totalTickets = items.stream().mapToLong(CartItem::getQuantity).sum();
 
         // Crea la orden, genera un Booking por cada item, descuenta los cupos de las sesiones y vacía el carrito.
@@ -237,6 +247,7 @@ public class OrderServiceImpl implements OrderService {
                     .order(order)
                     .experienceSession(session)
                     .quantity(item.getQuantity())
+                    .unitPrice(experience.getEffectivePrice())
                     .voucherCode(generateVoucherCode())
                     .createdAt(LocalDateTime.now())
                     .build();
@@ -265,7 +276,7 @@ public class OrderServiceImpl implements OrderService {
         }
 
         DiscountCoupon coupon = discountCouponRepository
-                .findByCode(request.getCouponCode().trim().toUpperCase())
+                .findByCodeForUpdate(request.getCouponCode().trim().toUpperCase())
                 .orElseThrow(() -> new ResourceNotFoundException("No existe un cupón con ese código"));
 
         String reason = DiscountCouponServiceImpl.reasonIfInvalid(coupon);
@@ -325,7 +336,7 @@ public class OrderServiceImpl implements OrderService {
             Experience experience = booking.getExperienceSession() != null
                     ? booking.getExperienceSession().getExperience()
                     : null;
-            BigDecimal gross = orZero(experience != null ? experience.getEffectivePrice() : null)
+            BigDecimal gross = orZero(BookingServiceImpl.paidUnitPrice(booking, experience))
                     .multiply(BigDecimal.valueOf(booking.getQuantity() != null ? booking.getQuantity() : 0));
             refunded = refunded.add(subtotal.signum() > 0
                     ? gross.multiply(total).divide(subtotal, 2, RoundingMode.HALF_UP)
@@ -380,7 +391,7 @@ public class OrderServiceImpl implements OrderService {
                         .startsAt(session != null ? session.getStartsAt() : null)
                         .endsAt(session != null ? session.getEndsAt() : null)
                         .quantity(booking.getQuantity())
-                        .unitPrice(experience != null ? experience.getEffectivePrice() : null)
+                        .unitPrice(BookingServiceImpl.paidUnitPrice(booking, experience))
                         .createdAt(booking.getCreatedAt())
                         .refunded(booking.isRefunded())
                         .refundedAt(booking.getRefundedAt())

@@ -26,6 +26,8 @@ import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.service.ExperienceSessionService;
 import com.uade.tpo.demo.service.NotificationService;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -37,6 +39,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     private final BookingRepository bookingRepository;
     private final NotificationService notificationService;
     private final CartItemRepository cartItemRepository;
+    private final EntityManager entityManager;
 
     // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
@@ -117,6 +120,9 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+        // Bloquea la fecha (como la compra y el reembolso): si alguien compra mientras se cambia el cupo,
+        // no se pisan los lugares disponibles.
+        entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
         if (!session.isActive()) {
             throw new BadRequestException("No se puede modificar una fecha cancelada");
         }
@@ -130,6 +136,15 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         // Una fecha no se puede pasar a otra experiencia (se llevaría sus reservas a una publicación ajena)
         if (request.getExperienceId() != null && !request.getExperienceId().equals(session.getExperience().getId())) {
             throw new BadRequestException("No se puede mover una fecha a otra experiencia");
+        }
+
+        // Con compradores no se cambia el horario: adelantarla, por ejemplo, les sacaría el plazo de 48 h para
+        // pedir el reembolso, y nadie les avisaría. Se cancela (se reembolsa sola) y se crea otra.
+        boolean scheduleChanged = (request.getStartsAt() != null && !request.getStartsAt().equals(session.getStartsAt()))
+                || (request.getEndsAt() != null && !request.getEndsAt().equals(session.getEndsAt()));
+        if (scheduleChanged && hasActiveBookings(sessionId)) {
+            throw new BadRequestException("Esta fecha ya tiene reservas, así que no se le puede cambiar el horario. "
+                    + "Cancelala (se reembolsa a los compradores) y creá una nueva.");
         }
 
         if (request.getStartsAt() != null) {
@@ -167,6 +182,8 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
         assertCanManage(session.getExperience(), currentUser);
+        // Bloquea la fecha antes de reembolsar sus reservas (mismo orden que BookingServiceImpl.refundBooking)
+        entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
 
         if (!session.isActive()) {
             throw new BadRequestException("Esta fecha ya está cancelada");
@@ -201,8 +218,9 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         experienceSessionRepository.save(session);
     }
 
-    // Borra del todo una fecha que ya no sirve (cancelada o terminada), en cascada: sus ítems de carrito,
-    // sus reservas y la fecha. Una fecha vigente primero se cancela (eso reembolsa a los compradores).
+    // Borra del todo una fecha que ya no sirve (cancelada o terminada) junto con sus ítems de carrito.
+    // Una fecha vigente primero se cancela (eso reembolsa a los compradores). Una fecha que tuvo reservas no se borra:
+    // son los vouchers e historial de otras personas, y las órdenes y estadísticas (lo cobrado y lo reembolsado) dependen de ellas.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void removeSession(Long sessionId, User currentUser)
@@ -211,16 +229,26 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
         assertCanManage(session.getExperience(), currentUser);
 
-        boolean ended = session.isFinished() || session.getStartsAt().isBefore(LocalDateTime.now());
+        // "Terminada" es que ya pasó la hora de fin: una fecha que empezó pero sigue en curso todavía no se toca
+        LocalDateTime now = LocalDateTime.now();
+        boolean ended = session.isFinished() || (session.getEndsAt() != null && session.getEndsAt().isBefore(now));
         if (session.isActive() && !ended) {
-            throw new BadRequestException("Esta fecha sigue vigente: primero cancelala (se reembolsa sola) y después la podés eliminar");
+            throw new BadRequestException("Esta fecha sigue vigente o en curso: si todavía no empezó, cancelala "
+                    + "(se reembolsa sola) y después la podés eliminar");
+        }
+        if (session.getBookings() != null && !session.getBookings().isEmpty()) {
+            throw new BadRequestException("Esta fecha tuvo reservas y los compradores conservan sus vouchers, "
+                    + "así que queda guardada en el historial.");
         }
 
         cartItemRepository.deleteByExperienceSessionId(sessionId);
-        if (session.getBookings() != null) {
-            bookingRepository.deleteAll(session.getBookings());
-        }
         experienceSessionRepository.delete(session);
+    }
+
+    // ¿Alguien tiene una reserva vigente (no reembolsada) para esta fecha?
+    private boolean hasActiveBookings(Long sessionId) {
+        return bookingRepository.findByExperienceSession_Id(sessionId).stream()
+                .anyMatch(booking -> !booking.isRefunded());
     }
 
     private void assertCanManage(Experience experience, User currentUser) throws ForbiddenException {

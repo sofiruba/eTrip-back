@@ -1,5 +1,6 @@
 package com.uade.tpo.demo.exceptions;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -51,6 +52,21 @@ public class GlobalExceptionHandler {
                 ? "Tu cuenta está desactivada. Pedile a un administrador que la reactive."
                 : "Usuario o contraseña incorrectos";
         return error(HttpStatus.UNAUTHORIZED, message);
+    }
+
+    // Un dato que la base no acepta (texto demasiado largo, un valor único repetido por dos pedidos a la vez):
+    // es culpa del pedido, no del servidor.
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
+        log.warn("Dato rechazado por la base: {}", ex.getMostSpecificCause().getMessage());
+        return error(HttpStatus.BAD_REQUEST, "Algún dato no es válido (muy largo o repetido). Revisalo y probá de nuevo.");
+    }
+
+    // Parámetros de paginación inválidos (?page=-1, ?size=0) y similares
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Parámetro inválido: {}", ex.getMessage());
+        return error(HttpStatus.BAD_REQUEST, "Algún parámetro de la solicitud no es válido");
     }
 
     // Cualquier error no previsto: se loguea y se responde con un mensaje entendible (nunca "No message available").

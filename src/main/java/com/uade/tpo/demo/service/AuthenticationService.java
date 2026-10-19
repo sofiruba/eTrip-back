@@ -3,6 +3,7 @@ package com.uade.tpo.demo.service;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -35,6 +36,7 @@ public class AuthenticationService {
     private static final int RESET_CODE_MAX_ATTEMPTS = 5;
     private static final String INVALID_CODE = "El código no es válido o ya venció. Pedí uno nuevo.";
     private static final SecureRandom RANDOM = new SecureRandom();
+    private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final UserRepository repository;
     private final PasswordResetCodeRepository resetCodeRepository;
@@ -60,6 +62,17 @@ public class AuthenticationService {
         if (request.getPassword().trim().length() < 6) {
             throw new BadRequestException("La contraseña debe tener al menos 6 caracteres");
         }
+        // El login acepta email o username y busca primero por email: si un username tuviera "@" o un email
+        // no fuera un email, alguien podría registrar como email el username de otro y dejarlo sin poder entrar.
+        if (!EMAIL_PATTERN.matcher(email).matches() || email.length() > 150) {
+            throw new BadRequestException("Ingresá un email válido");
+        }
+        if (username.contains("@") || username.length() > 50) {
+            throw new BadRequestException("El nombre de usuario no puede tener \"@\" ni más de 50 caracteres");
+        }
+        if (request.getFirstname().trim().length() > 100 || request.getLastname().trim().length() > 100) {
+            throw new BadRequestException("El nombre y el apellido pueden tener hasta 100 caracteres");
+        }
         if (repository.existsByDisplayUsername(username)) {
             throw new BadRequestException("Ese nombre de usuario ya está en uso");
         }
@@ -69,8 +82,8 @@ public class AuthenticationService {
 
         var user = User.builder()
                 .displayUsername(username)
-                .firstName(request.getFirstname())
-                .lastName(request.getLastname())
+                .firstName(request.getFirstname().trim())
+                .lastName(request.getLastname().trim())
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.CLIENTE)
@@ -135,8 +148,11 @@ public class AuthenticationService {
         resetCode.setAttempts(0);
         resetCodeRepository.save(resetCode);
         passwordResetSender.send(user, code);
+        // A una cuenta ADMIN nunca se le devuelve el código en la respuesta (solo sale por la consola del back):
+        // si no, cualquiera que sepa el usuario de un admin podría cambiarle la contraseña.
+        boolean exposeCode = showResetCode && user.getRole() != Role.ADMIN;
         return ForgotPasswordResponse.builder()
-                .devCode(showResetCode ? code : null)
+                .devCode(exposeCode ? code : null)
                 .build();
     }
 

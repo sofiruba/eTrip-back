@@ -189,6 +189,10 @@ public class ReviewServiceImpl implements ReviewService {
         if (request.getRating() == null || request.getRating() < 1 || request.getRating() > 5) {
             throw new BadRequestException("La puntuación tiene que ser de 1 a 5 estrellas");
         }
+
+        if (request.getComment() != null && request.getComment().trim().length() > 1000) {
+            throw new BadRequestException("La reseña puede tener hasta 1000 caracteres");
+        }
     }
 
     private String trimToNull(String value) {

@@ -69,6 +69,21 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
   entorno `CORS_ALLOWED_ORIGINS` con la URL de Vercel.
 - Fechas: formato ISO local sin zona → `2026-10-15T10:00:00`.
 
+### Reglas que agregó la revisión de seguridad (19/10)
+
+- `GET /users/{id}` ajeno/anónimo ya **no** devuelve `role` ni `active` (solo en `/users/me` o para ADMIN).
+- `forgot-password` sigue devolviendo `devCode` en desarrollo, **salvo para cuentas ADMIN** (su código solo sale por la consola del back).
+- `register`: el email tiene que tener formato de email (≤150), el username no puede tener `@` (≤50), nombre/apellido ≤100.
+- Fotos de experiencias: hasta 5, de hasta 5 MB, JPG/PNG/WEBP de verdad (si no se decodifica → 400) y como mucho 40 megapíxeles.
+- Los **listados** de experiencias (`GET /experiences`, `/mine`, búsquedas) mandan **solo la portada** en `imagesBase64`; `GET /experiences/{id}` manda todas.
+- Descuento de experiencia: 0–90% (igual que el front). Título ≤150, descripción ≤2000, ubicación ≤200, reseña ≤1000, categoría ≤100 (descripción ≤255).
+- `DELETE /experiences/{id}` falla (400) si la experiencia tuvo reservas: se desactiva en vez de borrarse. `DELETE` definitivo de una fecha: solo si ya terminó o está cancelada **y** nunca tuvo reservas.
+- `PUT /experience-sessions/{id}`: con reservas vigentes no se puede cambiar el horario (sí el cupo).
+- `Booking.unitPrice` guarda el precio pagado; voucher, reembolsos y stats lo usan (las reservas viejas usan el precio actual).
+- `POST /orders` acepta `expectedTotal` (opcional): si no coincide con el total calculado, 400 sin cobrar.
+- Reembolso, cancelar/editar fecha y cupón en la compra bloquean las filas (doble clic ya no duplica lugares ni usos de cupón).
+- `?page=-1` / `?size=0` y datos que la base no acepta → 400 (antes 500). `%` y `_` en la búsqueda se buscan literal.
+
 ---
 
 ## 1. Auth — `/api/v1/auth` (público)

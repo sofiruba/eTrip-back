@@ -7,6 +7,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -52,8 +53,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(authToken);
                 }
             }
-        } catch (JwtException | IllegalArgumentException ignored) {
-            // Un token vencido o malformado se trata como una petición anónima.
+        } catch (JwtException | IllegalArgumentException | UsernameNotFoundException ignored) {
+            // Un token vencido, malformado o de un usuario que ya no existe (ej. se reseteó la base)
+            // se trata como una petición anónima.
             // Los endpoints protegidos devolverán 401/403 y los públicos siguen funcionando.
         }
 
