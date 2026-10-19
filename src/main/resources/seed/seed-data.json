@@ -1,0 +1,395 @@
+{
+  "categories": [
+    { "name": "Aventura y naturaleza", "description": "Trekking, paisajes, cerros, lagos y escapadas al aire libre." },
+    { "name": "Deportes y aire libre", "description": "Kayak, surf, bici, escalada y todo lo que se haga moviéndose." },
+    { "name": "Gastronomía", "description": "Catas, cocina con locales, mercados y mesas compartidas." },
+    { "name": "Arte y creatividad", "description": "Talleres para hacer algo con tus manos: cerámica, pintura, foto." },
+    { "name": "Cultura y vida local", "description": "Barrios, historia y la ciudad contada por quienes viven ahí." },
+    { "name": "Bienestar y social", "description": "Yoga, meditación y planes para conocer gente nueva." },
+    { "name": "Música y noche", "description": "Tango, peñas, jazz y bares que no salen en las guías." }
+  ],
+  "coupons": [
+    { "code": "BIENVENIDA15", "percentage": 15, "validFromDays": -30, "validUntilDays": 120, "active": true },
+    { "code": "PLAN20", "percentage": 20, "validFromDays": -10, "validUntilDays": 60, "active": true },
+    { "code": "FINDE10", "percentage": 10, "validFromDays": -5, "validUntilDays": 30, "active": true },
+    { "code": "INVIERNO25", "percentage": 25, "validFromDays": -150, "validUntilDays": -60, "active": true },
+    { "code": "PAUSADO30", "percentage": 30, "validFromDays": -10, "validUntilDays": 60, "active": false }
+  ],
+  "admin": { "username": "admin", "firstname": "Equipo", "lastname": "PLAN", "email": "admin@plan.com", "password": "admin123" },
+  "buyers": [
+    { "username": "sofi.perez", "firstname": "Sofía", "lastname": "Pérez", "email": "sofia@plan.com" },
+    { "username": "tomi.gomez", "firstname": "Tomás", "lastname": "Gómez", "email": "tomas@plan.com" },
+    { "username": "vale.rios", "firstname": "Valentina", "lastname": "Ríos", "email": "valentina@plan.com" },
+    { "username": "juanma.diaz", "firstname": "Juan Manuel", "lastname": "Díaz", "email": "juanma@plan.com" },
+    { "username": "cami.sosa", "firstname": "Camila", "lastname": "Sosa", "email": "camila@plan.com" },
+    { "username": "fede.luna", "firstname": "Federico", "lastname": "Luna", "email": "federico@plan.com" },
+    { "username": "agus.romero", "firstname": "Agustina", "lastname": "Romero", "email": "agustina@plan.com" },
+    { "username": "nacho.vidal", "firstname": "Ignacio", "lastname": "Vidal", "email": "ignacio@plan.com" },
+    { "username": "meli.castro", "firstname": "Melina", "lastname": "Castro", "email": "melina@plan.com" },
+    { "username": "santi.ruiz", "firstname": "Santiago", "lastname": "Ruiz", "email": "santiago@plan.com" },
+    { "username": "lu.morales", "firstname": "Lucía", "lastname": "Morales", "email": "lucia@plan.com" },
+    { "username": "mati.herrera", "firstname": "Matías", "lastname": "Herrera", "email": "matias@plan.com" },
+    { "username": "emma.walker", "firstname": "Emma", "lastname": "Walker", "email": "emma@plan.com" },
+    { "username": "lucas.silva", "firstname": "Lucas", "lastname": "Silva", "email": "lucas@plan.com" },
+    { "username": "paula.ortiz", "firstname": "Paula", "lastname": "Ortiz", "email": "paula@plan.com" }
+  ],
+  "hosts": [
+    {
+      "username": "marcos.andes", "firstname": "Marcos", "lastname": "Quiroga", "email": "marcos@plan.com",
+      "experiences": [
+        {
+          "slug": "cerro-catedral", "title": "Trekking al Refugio Frey", "category": "Aventura y naturaleza",
+          "location": "Cerro Catedral, Bariloche", "price": 65000, "hours": 7, "times": ["08:30"], "capacity": 10,
+          "photo": "Refugio Frey Bariloche",
+          "description": "Subimos por el sendero del Cerro Catedral hasta la laguna Toncek y el Refugio Frey, rodeados de agujas de granito. Caminata exigente pero sin técnica: llevamos viandas, bastones para quien quiera y paramos en los mejores miradores. Volvemos al atardecer."
+        },
+        {
+          "slug": "circuito-chico", "title": "Bici por el Circuito Chico", "category": "Deportes y aire libre",
+          "location": "Llao Llao, Bariloche", "price": 42000, "discount": 15, "hours": 4, "times": ["10:00", "15:00"], "capacity": 12,
+          "photo": "Circuito Chico Bariloche",
+          "description": "Recorremos en bici los 25 km más lindos de la Patagonia: lago Moreno, Punto Panorámico, Bahía López y el Llao Llao. Bicis y casco incluidos; hay subidas, pero nos tomamos el tiempo para las fotos y un chocolate caliente."
+        },
+        {
+          "slug": "chocolate-bariloche", "title": "Ruta del chocolate artesanal", "category": "Gastronomía",
+          "location": "Centro, Bariloche", "price": 28000, "hours": 2, "times": ["17:00"], "capacity": 14,
+          "photo": "Bariloche chocolate shop",
+          "description": "Tres chocolaterías familiares del centro, una por generación. Probamos rama, bombones y el famoso submarino mientras te cuento cómo Bariloche se volvió la capital del chocolate."
+        }
+      ]
+    },
+    {
+      "username": "flor.delta", "firstname": "Florencia", "lastname": "Benítez", "email": "florencia@plan.com",
+      "experiences": [
+        {
+          "slug": "kayak-delta", "title": "Kayak al atardecer en el Delta", "category": "Deportes y aire libre",
+          "location": "Tigre, Buenos Aires", "price": 38000, "discount": 10, "hours": 3, "times": ["17:30"], "capacity": 10,
+          "photo": "Delta del Paraná Tigre kayak",
+          "description": "Salimos desde Tigre a recorrer los arroyos del Delta mientras baja el sol. Ideal para principiantes: antes hacemos una práctica en aguas tranquilas. Kayaks dobles, chaleco y bolsa estanca incluidos."
+        },
+        {
+          "slug": "isla-delta", "title": "Día de isla: almuerzo y caminata en el Delta", "category": "Aventura y naturaleza",
+          "location": "Delta de Tigre, Buenos Aires", "price": 54000, "hours": 6, "times": ["10:00"], "capacity": 16,
+          "photo": "Delta del Paraná islas",
+          "description": "Lancha colectiva hasta una isla de la segunda sección, caminata por el monte ribereño, almuerzo en un recreo isleño y siesta en el muelle. Un día entero sin señal a 40 minutos de la ciudad."
+        },
+        {
+          "slug": "mercado-frutos", "title": "Mercado de Frutos con una isleña", "category": "Cultura y vida local",
+          "location": "Tigre, Buenos Aires", "price": 18000, "hours": 2, "times": ["11:00"], "capacity": 12,
+          "photo": "Puerto de Frutos Tigre",
+          "description": "Recorremos el Puerto de Frutos con alguien que nació en las islas: mimbre, dulces caseros y las historias de los almacenes flotantes que todavía reparten por los ríos."
+        }
+      ]
+    },
+    {
+      "username": "lu.cocina", "firstname": "Lucía", "lastname": "Fernández", "email": "lu.cocina@plan.com",
+      "experiences": [
+        {
+          "slug": "empanadas", "title": "Empanadas salteñas con una cocinera de Salta", "category": "Gastronomía",
+          "location": "Palermo, Buenos Aires", "price": 32000, "hours": 3, "times": ["19:00"], "capacity": 10,
+          "photo": "Empanadas salteñas",
+          "description": "Amasamos, cortamos el relleno a cuchillo y aprendemos el repulgue de 13 pliegues. Después las comemos recién salidas del horno con vino torrontés. Te llevás la receta de la familia."
+        },
+        {
+          "slug": "asado", "title": "Asado criollo de principio a fin", "category": "Gastronomía",
+          "location": "Villa Crespo, Buenos Aires", "price": 58000, "discount": 20, "hours": 4, "times": ["12:30", "20:00"], "capacity": 12,
+          "photo": "Asado argentino parrilla",
+          "description": "Desde prender el fuego hasta el punto de la entraña. Cortes, achuras, chimichurri casero y provoleta en una terraza con parrilla. Lo cocinamos entre todos y lo comemos en la misma mesa larga."
+        },
+        {
+          "slug": "mate-facturas", "title": "Ronda de mate y facturas", "category": "Bienestar y social",
+          "location": "San Telmo, Buenos Aires", "price": 12000, "hours": 2, "times": ["10:30", "17:00"], "capacity": 8,
+          "photo": "Mate infusion argentina",
+          "description": "La mejor forma de conocer gente en Argentina es compartiendo un mate. Te enseño a cebarlo bien, probamos yerbas de distintas provincias y facturas de la panadería del barrio."
+        }
+      ]
+    },
+    {
+      "username": "joaco.vinos", "firstname": "Joaquín", "lastname": "Videla", "email": "joaquin@plan.com",
+      "experiences": [
+        {
+          "slug": "bodega-lujan", "title": "Bodegas de Luján de Cuyo en bici", "category": "Gastronomía",
+          "location": "Luján de Cuyo, Mendoza", "price": 72000, "hours": 6, "times": ["09:30"], "capacity": 12,
+          "photo": "Luján de Cuyo viñedos",
+          "description": "Pedaleamos entre viñedos con la cordillera de fondo y visitamos tres bodegas: una centenaria, una boutique y una de vinos naturales. Degustaciones y almuerzo de campo incluidos."
+        },
+        {
+          "slug": "cata-ciegas", "title": "Cata a ciegas de vinos naturales", "category": "Gastronomía",
+          "location": "Chacarita, Buenos Aires", "price": 26000, "hours": 2, "times": ["20:00"], "capacity": 14,
+          "photo": "Wine tasting glasses",
+          "description": "Probamos cinco vinos naturales sin ver la etiqueta y jugamos a adivinar cepa, región y precio. Una forma divertida de aprender sin solemnidad, con quesos y fiambres de productores chicos."
+        },
+        {
+          "slug": "aconcagua", "title": "Mirador del Aconcagua y Puente del Inca", "category": "Aventura y naturaleza",
+          "location": "Alta Montaña, Mendoza", "price": 85000, "discount": 10, "hours": 10, "times": ["07:30"], "capacity": 14,
+          "photo": "Aconcagua Laguna de Horcones",
+          "description": "Ruta 7 hacia la cordillera: Potrerillos, Uspallata, Puente del Inca y la caminata corta hasta la Laguna de Horcones, con el Aconcagua enfrente. Llevá abrigo: arriba siempre hace frío."
+        }
+      ]
+    },
+    {
+      "username": "ana.ceramica", "firstname": "Ana", "lastname": "Lombardi", "email": "ana@plan.com",
+      "experiences": [
+        {
+          "slug": "ceramica", "title": "Taller de cerámica en torno", "category": "Arte y creatividad",
+          "location": "Colegiales, Buenos Aires", "price": 34000, "hours": 3, "times": ["10:00", "18:30"], "capacity": 8,
+          "photo": "pottery wheel hands clay",
+          "description": "Primera vez en el torno: centramos el barro, levantamos un cuenco y lo decoramos. Las piezas se hornean y las retirás en dos semanas. Delantal y materiales incluidos, música y té de por medio."
+        },
+        {
+          "slug": "acuarela", "title": "Acuarela en la Costanera Sur", "category": "Arte y creatividad",
+          "location": "Puerto Madero, Buenos Aires", "price": 22000, "hours": 2, "times": ["16:00"], "capacity": 12,
+          "photo": "Reserva Ecológica Costanera Sur",
+          "description": "Pintamos al aire libre en la Reserva Ecológica: técnica básica de acuarela, mezcla de colores y cómo encuadrar un paisaje. No hace falta saber dibujar, solo tener ganas de mirar."
+        },
+        {
+          "slug": "encuadernacion", "title": "Encuadernación artesanal: tu propia libreta", "category": "Arte y creatividad",
+          "location": "Almagro, Buenos Aires", "price": 25000, "discount": 15, "hours": 3, "times": ["15:00"], "capacity": 8,
+          "photo": "bookbinding handmade notebook",
+          "description": "Cosemos a mano una libreta con costura japonesa, elegimos papeles y hacemos las tapas. Te la llevás terminada para tu próximo viaje."
+        }
+      ]
+    },
+    {
+      "username": "pablo.foto", "firstname": "Pablo", "lastname": "Ibarra", "email": "pablo@plan.com",
+      "experiences": [
+        {
+          "slug": "la-boca", "title": "Fotografía analógica en La Boca", "category": "Arte y creatividad",
+          "location": "La Boca, Buenos Aires", "price": 30000, "hours": 3, "times": ["10:00", "16:00"], "capacity": 10,
+          "photo": "Caminito La Boca",
+          "description": "Recorremos Caminito y los rincones que no salen en las postales con una cámara de rollo en la mano. Te presto la cámara y el rollo; las fotos reveladas te llegan por mail."
+        },
+        {
+          "slug": "arte-urbano", "title": "Murales y arte urbano en Colegiales", "category": "Cultura y vida local",
+          "location": "Colegiales, Buenos Aires", "price": 20000, "hours": 2, "times": ["11:00", "16:30"], "capacity": 15,
+          "photo": "Buenos Aires street art mural",
+          "description": "Buenos Aires es una de las capitales del street art. Caminamos entre murales enormes, conocemos a sus artistas y terminamos pintando un pedacito de pared."
+        },
+        {
+          "slug": "fileteado", "title": "Taller de fileteado porteño", "category": "Arte y creatividad",
+          "location": "San Telmo, Buenos Aires", "price": 28000, "hours": 3, "times": ["18:00"], "capacity": 8,
+          "photo": "Fileteado porteño",
+          "description": "El fileteado es patrimonio de la ciudad. Aprendemos sus volutas, hojas de acanto y letras, y pintamos un cartelito con tu frase favorita."
+        }
+      ]
+    },
+    {
+      "username": "dolo.tango", "firstname": "Dolores", "lastname": "Acosta", "email": "dolores@plan.com",
+      "experiences": [
+        {
+          "slug": "tango-milonga", "title": "Clase de tango y milonga de barrio", "category": "Música y noche",
+          "location": "Almagro, Buenos Aires", "price": 26000, "hours": 4, "times": ["20:30"], "capacity": 20,
+          "photo": "Tango Buenos Aires milonga",
+          "description": "Una hora de clase para aprender el abrazo y la caminata, y después a la milonga de verdad: la del barrio, con orquesta en vivo y señoras que bailan desde hace cincuenta años."
+        },
+        {
+          "slug": "pena-folklore", "title": "Peña folclórica con empanadas", "category": "Música y noche",
+          "location": "Palermo, Buenos Aires", "price": 24000, "discount": 10, "hours": 4, "times": ["21:00"], "capacity": 25,
+          "photo": "peña folclórica argentina guitarra",
+          "description": "Zamba, chacarera y guitarreada en una peña escondida. Te enseñamos los primeros pasos con pañuelo y comemos empanadas y locro entre canción y canción."
+        },
+        {
+          "slug": "bandoneon", "title": "Conocé el bandoneón", "category": "Música y noche",
+          "location": "San Telmo, Buenos Aires", "price": 18000, "hours": 1.5, "times": ["18:00"], "capacity": 10,
+          "photo": "Bandoneón",
+          "description": "Un bandoneonista te muestra de cerca el instrumento más difícil del tango: cómo se arma, cómo respira y por qué suena así. Terminamos con un pequeño concierto íntimo."
+        }
+      ]
+    },
+    {
+      "username": "nico.jazz", "firstname": "Nicolás", "lastname": "Ferreyra", "email": "nicolas@plan.com",
+      "experiences": [
+        {
+          "slug": "jazz-palermo", "title": "Bares de jazz escondidos", "category": "Música y noche",
+          "location": "Palermo, Buenos Aires", "price": 35000, "hours": 4, "times": ["21:30"], "capacity": 12,
+          "photo": "jazz club live music",
+          "description": "Tres bares de jazz que no tienen cartel: entramos por una heladera, una librería y una puerta sin número. Música en vivo, un trago en cada parada y las historias de cada lugar."
+        },
+        {
+          "slug": "speakeasy", "title": "Coctelería de autor: los speakeasy", "category": "Música y noche",
+          "location": "Recoleta, Buenos Aires", "price": 42000, "discount": 15, "hours": 3, "times": ["21:00"], "capacity": 10,
+          "photo": "cocktail bar bartender",
+          "description": "Buenos Aires tiene varios de los mejores bares del mundo. Visitamos dos y un bartender nos enseña a preparar un clásico porteño con fernet y vermut."
+        },
+        {
+          "slug": "recoleta-noche", "title": "Recoleta de noche: historias del cementerio", "category": "Cultura y vida local",
+          "location": "Recoleta, Buenos Aires", "price": 22000, "hours": 2, "times": ["19:30"], "capacity": 18,
+          "photo": "Cementerio de la Recoleta",
+          "description": "Las historias más raras de la ciudad están en el Cementerio de la Recoleta. Las contamos alrededor del muro, con linterna, y terminamos en un café de los de antes."
+        }
+      ]
+    },
+    {
+      "username": "caro.yoga", "firstname": "Carolina", "lastname": "Medina", "email": "carolina@plan.com",
+      "experiences": [
+        {
+          "slug": "yoga-parque", "title": "Yoga al amanecer en los Bosques de Palermo", "category": "Bienestar y social",
+          "location": "Bosques de Palermo, Buenos Aires", "price": 15000, "hours": 1.5, "times": ["07:30", "09:00"], "capacity": 20,
+          "photo": "Bosques de Palermo lagos",
+          "description": "Una clase de hatha suave junto a los lagos, para todos los niveles. Llevamos mats de sobra y cerramos con un desayuno de frutas y café de especialidad."
+        },
+        {
+          "slug": "meditacion-rio", "title": "Meditación y respiración frente al río", "category": "Bienestar y social",
+          "location": "Vicente López, Buenos Aires", "price": 14000, "discount": 20, "hours": 1, "times": ["18:30"], "capacity": 15,
+          "photo": "Río de la Plata atardecer",
+          "description": "Una hora para bajar un cambio: respiración guiada, meditación y escaneo corporal mientras el sol se esconde sobre el Río de la Plata."
+        },
+        {
+          "slug": "cena-desconocidos", "title": "Cena entre desconocidos", "category": "Bienestar y social",
+          "location": "Villa Crespo, Buenos Aires", "price": 38000, "hours": 3, "times": ["20:30"], "capacity": 10,
+          "photo": "dinner table friends",
+          "description": "Diez personas que no se conocen, una mesa larga y un menú de pasos. Las preguntas para romper el hielo las ponemos nosotros; las amistades corren por tu cuenta."
+        }
+      ]
+    },
+    {
+      "username": "rodri.surf", "firstname": "Rodrigo", "lastname": "Paz", "email": "rodrigo@plan.com",
+      "experiences": [
+        {
+          "slug": "surf-mdp", "title": "Clase de surf en Playa Grande", "category": "Deportes y aire libre",
+          "location": "Playa Grande, Mar del Plata", "price": 30000, "hours": 2, "times": ["09:00", "16:00"], "capacity": 8,
+          "photo": "Mar del Plata surf",
+          "description": "Tu primera ola en el Atlántico. Tabla de espuma y traje incluidos, práctica en la arena y después al agua con un instructor cada cuatro personas."
+        },
+        {
+          "slug": "faro-mdp", "title": "Caminata costera hasta el Faro", "category": "Aventura y naturaleza",
+          "location": "Punta Mogotes, Mar del Plata", "price": 16000, "hours": 3, "times": ["10:00"], "capacity": 15,
+          "photo": "Faro Punta Mogotes",
+          "description": "Caminamos por la costa desde el puerto hasta el Faro de Punta Mogotes: lobos marinos, acantilados y un final con churros en la rambla."
+        },
+        {
+          "slug": "escalada", "title": "Escalada en roca para principiantes", "category": "Deportes y aire libre",
+          "location": "Los Gigantes, Córdoba", "price": 48000, "hours": 5, "times": ["09:00"], "capacity": 6,
+          "photo": "rock climbing beginner",
+          "description": "Vías cortas y seguras en las sierras con todo el equipo incluido. Aprendemos nudos, aseguramiento y movimientos básicos con un guía certificado."
+        }
+      ]
+    },
+    {
+      "username": "jime.salta", "firstname": "Jimena", "lastname": "Guzmán", "email": "jimena@plan.com",
+      "experiences": [
+        {
+          "slug": "quebrada", "title": "Quebrada de las Conchas en el día", "category": "Aventura y naturaleza",
+          "location": "Cafayate, Salta", "price": 78000, "discount": 10, "hours": 9, "times": ["08:00"], "capacity": 14,
+          "photo": "Quebrada de las Conchas",
+          "description": "La Garganta del Diablo, el Anfiteatro y los colores imposibles de la quebrada camino a Cafayate. Paramos a caminar en cada formación y terminamos en una bodega de torrontés."
+        },
+        {
+          "slug": "salta-colonial", "title": "Salta colonial y sus iglesias", "category": "Cultura y vida local",
+          "location": "Centro, Salta", "price": 20000, "hours": 2.5, "times": ["10:30", "17:00"], "capacity": 16,
+          "photo": "Catedral de Salta",
+          "description": "La plaza 9 de Julio, el Cabildo, la Catedral y San Francisco, contados por una salteña. Cerramos en un mercado con humita y tamal."
+        },
+        {
+          "slug": "telar", "title": "Telar andino con artesanas", "category": "Arte y creatividad",
+          "location": "Cachi, Salta", "price": 36000, "hours": 4, "times": ["14:00"], "capacity": 6,
+          "photo": "Cachi Salta",
+          "description": "En un taller familiar de Cachi aprendemos a hilar lana de llama, teñir con plantas del valle y tejer una pieza chica en telar de cintura."
+        }
+      ]
+    },
+    {
+      "username": "martin.cordoba", "firstname": "Martín", "lastname": "Olmedo", "email": "martin@plan.com",
+      "experiences": [
+        {
+          "slug": "champaqui", "title": "Cerro Champaquí en dos días", "category": "Aventura y naturaleza",
+          "location": "Villa Alpina, Córdoba", "price": 95000, "hours": 30, "times": ["07:00"], "capacity": 12,
+          "photo": "Cerro Champaquí",
+          "description": "El techo de Córdoba: subimos el primer día, dormimos en un puesto serrano y hacemos cumbre al amanecer. Comidas, guía y seguro incluidos."
+        },
+        {
+          "slug": "manzana-jesuitica", "title": "Manzana Jesuítica y Córdoba universitaria", "category": "Cultura y vida local",
+          "location": "Centro, Córdoba", "price": 18000, "hours": 2, "times": ["11:00", "16:00"], "capacity": 18,
+          "photo": "Manzana Jesuítica Córdoba",
+          "description": "Recorremos la Manzana Jesuítica, patrimonio de la humanidad, y la universidad más antigua del país. Historias de estudiantes, criptas y la reforma del 18."
+        },
+        {
+          "slug": "rafting", "title": "Rafting en el río Los Reartes", "category": "Deportes y aire libre",
+          "location": "Villa General Belgrano, Córdoba", "price": 40000, "discount": 15, "hours": 3, "times": ["10:00", "14:30"], "capacity": 12,
+          "photo": "rafting river",
+          "description": "Rápidos de clase II, ideales para la primera vez. Equipo completo, charla de seguridad y una cerveza artesanal de Villa General Belgrano al final."
+        }
+      ]
+    },
+    {
+      "username": "lali.ushuaia", "firstname": "Laura", "lastname": "Ojeda", "email": "laura@plan.com",
+      "experiences": [
+        {
+          "slug": "laguna-esmeralda", "title": "Trekking a Laguna Esmeralda", "category": "Aventura y naturaleza",
+          "location": "Valle de Lobos, Ushuaia", "price": 60000, "hours": 6, "times": ["09:00"], "capacity": 10,
+          "photo": "Laguna Esmeralda Ushuaia",
+          "description": "Turbales, bosque de lengas y una laguna verde al pie del glaciar Ojo del Albino. Prestamos polainas para el barro y hacemos picnic frente al agua."
+        },
+        {
+          "slug": "canal-beagle", "title": "Navegación por el Canal Beagle", "category": "Aventura y naturaleza",
+          "location": "Puerto, Ushuaia", "price": 82000, "discount": 10, "hours": 4, "times": ["10:00", "15:00"], "capacity": 20,
+          "photo": "Faro Les Eclaireurs Canal Beagle",
+          "description": "Navegamos hasta el Faro Les Eclaireurs, la isla de los lobos marinos y la de los cormoranes, con el fin del mundo como paisaje."
+        }
+      ]
+    },
+    {
+      "username": "mica.rosario", "firstname": "Micaela", "lastname": "García", "email": "micaela@plan.com",
+      "experiences": [
+        {
+          "slug": "monumento-bandera", "title": "Rosario desde el río y el Monumento", "category": "Cultura y vida local",
+          "location": "Centro, Rosario", "price": 19000, "hours": 3, "times": ["10:00", "17:30"], "capacity": 15,
+          "photo": "Monumento a la Bandera Rosario",
+          "description": "Subimos al mirador del Monumento a la Bandera, caminamos la costanera y cruzamos en lancha a la isla para ver la ciudad desde el Paraná."
+        },
+        {
+          "slug": "paddle-parana", "title": "Stand up paddle en el Paraná", "category": "Deportes y aire libre",
+          "location": "La Florida, Rosario", "price": 27000, "hours": 2, "times": ["09:30", "17:00"], "capacity": 8,
+          "photo": "stand up paddle river",
+          "description": "Remamos parados por la costa del Paraná con tabla, remo y chaleco incluidos. Empezamos en la orilla y en diez minutos estás navegando."
+        },
+        {
+          "slug": "feria-mataderos", "title": "Feria de Mataderos: tradición gaucha", "category": "Cultura y vida local",
+          "location": "Mataderos, Buenos Aires", "price": 16000, "hours": 3, "times": ["12:00"], "capacity": 20,
+          "photo": "Feria de Mataderos",
+          "description": "La feria más criolla de Buenos Aires: carrera de sortijas, artesanos, chacarera en la calle y el mejor choripán del fin de semana."
+        }
+      ]
+    },
+    {
+      "username": "fer.montevideo", "firstname": "Fernanda", "lastname": "Suárez", "email": "fernanda@plan.com",
+      "experiences": [
+        {
+          "slug": "ciudad-vieja", "title": "Ciudad Vieja y Mercado del Puerto", "category": "Cultura y vida local",
+          "location": "Ciudad Vieja, Montevideo", "price": 24000, "hours": 3, "times": ["11:00"], "capacity": 14,
+          "photo": "Ciudad Vieja Montevideo",
+          "description": "Caminamos la peatonal Sarandí, la Plaza Matriz y el Teatro Solís, y terminamos en el Mercado del Puerto con un medio y medio y un buen asado uruguayo."
+        },
+        {
+          "slug": "candombe", "title": "Tambores de candombe en Barrio Sur", "category": "Música y noche",
+          "location": "Barrio Sur, Montevideo", "price": 22000, "hours": 2, "times": ["19:00"], "capacity": 12,
+          "photo": "Candombe Montevideo",
+          "description": "Aprendemos los tres tambores del candombe con una comparsa del barrio y, si es domingo, salimos detrás de la llamada por las calles empedradas."
+        }
+      ]
+    }
+  ],
+  "reviewComments": {
+    "5": [
+      "Superó todas mis expectativas. Se nota que lo hace con muchísimo cariño.",
+      "De lo mejor que hice en el viaje. Volvería mañana mismo.",
+      "Un plan hermoso, súper bien organizado y con un grupo muy lindo.",
+      "Increíble. Aprendí un montón y la pasé genial.",
+      "Atención de diez, puntual y con mil recomendaciones para seguir el día."
+    ],
+    "4": [
+      "Muy lindo plan. Lo único: se hizo un poco corto, me hubiera quedado más.",
+      "Muy recomendable. El lugar es precioso, aunque éramos bastantes.",
+      "Buenísimo, la anfitriona sabe muchísimo. Llevá abrigo que refresca.",
+      "La pasamos muy bien. Arrancó unos minutos tarde, pero valió la pena."
+    ],
+    "3": [
+      "Estuvo bien, aunque esperaba algo más tranquilo. El grupo era muy grande.",
+      "Correcto. La experiencia está buena pero el punto de encuentro costó encontrarlo."
+    ]
+  },
+  "hostReplies": [
+    "¡Gracias por venir! Nos encantó compartirlo con vos.",
+    "¡Qué lindo leer esto! Te esperamos para la próxima.",
+    "Gracias por el comentario, lo tenemos en cuenta para las próximas fechas."
+  ]
+}

@@ -83,6 +83,29 @@ Notas:
 5. API en `http://localhost:4002`. Hibernate crea/actualiza las tablas al arrancar
    (`spring.jpa.hibernate.ddl-auto=update`).
 
+### Cargar datos de ejemplo (borra todo)
+
+`DataSeeder` ([`seed/DataSeeder.java`](src/main/java/com/uade/tpo/demo/seed/DataSeeder.java)) es de **un solo uso**:
+solo corre si se arranca con `--app.seed=true`. **Vacía todas las tablas** y carga lo que hay en
+[`resources/seed/seed-data.json`](src/main/resources/seed/seed-data.json) con las fotos de `resources/seed/fotos`
+(créditos y licencias en [`CREDITOS-FOTOS.md`](src/main/resources/seed/CREDITOS-FOTOS.md)). Después la app sigue normal.
+
+```bash
+./mvnw spring-boot:run "-Dspring-boot.run.arguments=--app.seed=true"
+```
+
+Carga 7 categorías, 43 experiencias en 9 ciudades (con 1–2 fotos cada una), fechas pasadas y futuras, ~550 reservas
+(algunas reembolsadas, una fecha agotada y varias casi llenas), ~170 reseñas con respuestas del anfitrión y 5 cupones
+(`BIENVENIDA15`, `PLAN20`, `FINDE10`; `INVIERNO25` vencido y `PAUSADO30` desactivado). Cuentas:
+
+| Cuenta | Contraseña | Para qué |
+|---|---|---|
+| `admin@plan.com` | `admin123` | Panel de administración |
+| `sofia@plan.com` | `plan1234` | Demo del comprador: reservas próximas y pasadas, una experiencia sin reseñar |
+| `marcos@plan.com`, `florencia@plan.com`, … | `plan1234` | Anfitriones (emails en el JSON) |
+
+Sin el flag no hace nada: se puede borrar la clase cuando ya no haga falta.
+
 ### Autenticación
 
 ```bash
