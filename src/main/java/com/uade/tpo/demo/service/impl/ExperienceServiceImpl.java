@@ -77,34 +77,12 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final BookingRepository bookingRepository;
     private final CartItemRepository cartItemRepository;
 
-    // Lista las experiencias publicadas; las inactivas se reservan para gestión.
+    // Busca experiencias combinando filtros opcionales (ver ExperienceSpecifications).
     // Los listados mandan solo la portada: todas las fotos de todas las experiencias hacían pesadísimo el inicio.
-    @Override
-    @Transactional(readOnly = true)
-    public Page<ExperienceResponseDTO> getExperiences(Pageable pageable) {
-        return experienceRepository.findAll(
-                (root, query, criteriaBuilder) -> criteriaBuilder.isTrue(root.get("active")),
-                pageable).map(this::toListResponse);
-    }
-
-    // Busca experiencias combinando filtros opcionales (categoría, precio, ubicación, fechas, etc).
-    @Override
-    @Transactional(readOnly = true)
-    public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
-            throws ResourceNotFoundException, BadRequestException {
-        return searchExperiences(filter, pageable, false);
-    }
-
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable,
             boolean includeInactive) throws ResourceNotFoundException, BadRequestException {
-        if (filter == null) {
-            return includeInactive
-                    ? experienceRepository.findAll(pageable).map(this::toListResponse)
-                    : getExperiences(pageable);
-        }
-
         if (filter.getCategoryId() != null) {
             validateCategoryExists(filter.getCategoryId());
         }
@@ -116,16 +94,13 @@ public class ExperienceServiceImpl implements ExperienceService {
                 && filter.getDateFrom().isAfter(filter.getDateTo())) {
             throw new BadRequestException("La fecha desde no puede ser posterior a la fecha hasta");
         }
+        if (filter.getDurationMin() != null && filter.getDurationMax() != null
+                && filter.getDurationMin() > filter.getDurationMax()) {
+            throw new BadRequestException("La duración mínima no puede ser mayor a la máxima");
+        }
 
         return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive), pageable)
                 .map(this::toListResponse);
-    }
-
-    // Una experiencia puntual por id.
-    @Override
-    @Transactional(readOnly = true)
-    public ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException {
-        return toResponse(findExperience(experienceId));
     }
 
     @Override
@@ -166,6 +141,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .description(trimToNull(request.getDescription()))
                 .price(request.getPrice())
                 .location(trimToNull(request.getLocation()))
+                .adultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()))
                 .category(category)
                 .publisher(publisher)
                 .build();
@@ -202,6 +178,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         experience.setDescription(trimToNull(request.getDescription()));
         experience.setPrice(request.getPrice());
         experience.setLocation(trimToNull(request.getLocation()));
+        experience.setAdultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()));
 
         List<MultipartFile> validImages = nonEmptyImages(images);
         if (!validImages.isEmpty()) {
@@ -276,8 +253,6 @@ public class ExperienceServiceImpl implements ExperienceService {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
         experience.setActive(active);
-        // Una pausa o activación manual reemplaza a la automática: agregar fechas ya no la reactiva sola
-        experience.setAutoPaused(false);
         return toResponse(experienceRepository.save(experience));
     }
 
@@ -478,6 +453,13 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experience, false);
     }
 
+    // Tiene alguna fecha vigente por delante: es lo mismo que pide el catálogo público para mostrarla
+    private boolean hasUpcomingSessions(Experience experience) {
+        LocalDateTime now = LocalDateTime.now();
+        return experience.getSessions() != null && experience.getSessions().stream()
+                .anyMatch(session -> session.isActive() && session.getStartsAt() != null && session.getStartsAt().isAfter(now));
+    }
+
     private ExperienceResponseDTO toResponse(Experience experience, boolean allImages) {
         List<Review> reviews = experience.getReviews();
         int reviewCount = reviews != null ? reviews.size() : 0;
@@ -505,7 +487,8 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .discountPercentage(experience.getDiscountPercentage())
                 .finalPrice(experience.getEffectivePrice())
                 .active(experience.isActive())
-                .status(experience.isActive() ? "ACTIVE" : experience.isAutoPaused() ? "PAUSED_NO_DATES" : "INACTIVE")
+                .status(!experience.isActive() ? "INACTIVE" : hasUpcomingSessions(experience) ? "ACTIVE" : "NO_DATES")
+                .adultsOnly(experience.isAdultsOnly())
                 .location(experience.getLocation())
                 .imagesBase64(imagesBase64)
                 .categoryId(experience.getCategory() != null ? experience.getCategory().getId() : null)

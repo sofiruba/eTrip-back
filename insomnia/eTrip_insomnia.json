@@ -883,7 +883,7 @@
       "parentId": "fld_exp",
       "name": "GET experiencias - filtros avanzados (categoria/precio/ubicacion/fecha/ofertas)",
       "method": "GET",
-      "url": "{{ _.base_url }}/experiences?categoryId=&title=&location=Palermo&minPrice=1000&maxPrice=50000&publisherId=&onlyDiscounted=true&dateFrom=2027-01-01T00:00:00&dateTo=2027-12-31T23:59:59",
+      "url": "{{ _.base_url }}/experiences?categoryId=&title=&location=Palermo&minPrice=1000&maxPrice=50000&publisherId=&onlyDiscounted=true&dateFrom=2027-01-01&dateTo=2027-12-31&guests=2&timeSlots=tarde,noche&withKids=true",
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"

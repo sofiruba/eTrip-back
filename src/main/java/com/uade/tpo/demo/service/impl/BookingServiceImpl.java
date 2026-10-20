@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.service.impl;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 import org.springframework.data.domain.Page;
@@ -169,7 +171,7 @@ public class BookingServiceImpl implements BookingService {
         Order order = booking.getOrder();
         User buyer = order != null ? order.getUser() : null;
 
-        return BookingResponseDTO.builder()
+        return withEarnings(BookingResponseDTO.builder()
                 .id(booking.getId())
                 .voucherCode(booking.getVoucherCode())
                 .orderId(order != null ? order.getId() : null)
@@ -186,15 +188,36 @@ public class BookingServiceImpl implements BookingService {
                 .status(bookingStatus(booking, session))
                 .buyerId(buyer != null ? buyer.getId() : null)
                 .buyerName(fullName(buyer))
-                .build();
+                .build(), booking, experience);
     }
 
     // El precio que se pagó (guardado al comprar). Las reservas anteriores a ese campo usan el precio actual.
-    static java.math.BigDecimal paidUnitPrice(Booking booking, Experience experience) {
+    static BigDecimal paidUnitPrice(Booking booking, Experience experience) {
         if (booking.getUnitPrice() != null) {
             return booking.getUnitPrice();
         }
         return experience != null ? experience.getEffectivePrice() : null;
+    }
+
+    // Lo que se pagó por esta reserva: su parte del total de la orden (el cupón se reparte en proporción).
+    static BigDecimal paidAmount(Booking booking, Experience experience) {
+        BigDecimal unitPrice = paidUnitPrice(booking, experience);
+        BigDecimal gross = (unitPrice != null ? unitPrice : BigDecimal.ZERO)
+                .multiply(BigDecimal.valueOf(booking.getQuantity() != null ? booking.getQuantity() : 0));
+        Order order = booking.getOrder();
+        BigDecimal subtotal = order != null && order.getSubtotal() != null ? order.getSubtotal() : BigDecimal.ZERO;
+        BigDecimal total = order != null && order.getTotal() != null ? order.getTotal() : BigDecimal.ZERO;
+        return subtotal.signum() > 0 ? gross.multiply(total).divide(subtotal, 2, RoundingMode.HALF_UP) : gross;
+    }
+
+    // Completa lo pagado, la comisión de PLAN y la ganancia del anfitrión (todo en 0 si se reembolsó).
+    static BookingResponseDTO withEarnings(BookingResponseDTO dto, Booking booking, Experience experience) {
+        BigDecimal paid = booking.isRefunded() ? BigDecimal.ZERO : paidAmount(booking, experience);
+        BigDecimal commission = OrderServiceImpl.commissionOf(paid);
+        dto.setPaidAmount(paid);
+        dto.setCommission(commission);
+        dto.setHostEarnings(paid.subtract(commission));
+        return dto;
     }
 
     private String fullName(User user) {
@@ -212,8 +235,6 @@ public class BookingServiceImpl implements BookingService {
         if (booking.isRefunded()) {
             return "REFUNDED";
         }
-        boolean ended = session != null
-                && (session.isFinished() || (session.getEndsAt() != null && session.getEndsAt().isBefore(LocalDateTime.now())));
-        return ended ? "COMPLETED" : "CONFIRMED";
+        return session != null && session.hasEnded() ? "COMPLETED" : "CONFIRMED";
     }
 }

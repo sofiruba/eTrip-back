@@ -22,14 +22,12 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
 
     List<CartItem> findByCartId(Long cartId);
 
-    boolean existsByExperienceSessionId(Long experienceSessionId);
-
     // Al eliminar una experiencia: saca sus fechas de todos los carritos
     void deleteByExperienceSessionId(Long experienceSessionId);
 
-    // Tarea automática: saca de los carritos las fechas canceladas, terminadas o que ya empezaron.
+    // Al abrir el carrito: saca las fechas canceladas o que ya empezaron (ya no se pueden comprar).
     @Modifying
-    @Query("delete from CartItem i where i.experienceSession.id in "
-            + "(select s.id from ExperienceSession s where s.active = false or s.finished = true or s.startsAt < :now)")
-    int deleteUnavailable(@Param("now") LocalDateTime now);
+    @Query("delete from CartItem i where i.cart.id = :cartId and i.experienceSession.id in "
+            + "(select s.id from ExperienceSession s where s.active = false or s.startsAt < :now)")
+    int deleteUnavailable(@Param("cartId") Long cartId, @Param("now") LocalDateTime now);
 }

@@ -24,8 +24,13 @@ public class ExperienceResponseDTO {
     /** Precio ya con el descuento aplicado (igual a price si no hay descuento). */
     private BigDecimal finalPrice;
     private boolean active;
-    /** ACTIVE | PAUSED_NO_DATES (pausada sola por no tener fechas) | INACTIVE (pausada a mano). */
+    /**
+     * ACTIVE | NO_DATES (publicada pero sin fechas futuras: no aparece en el catálogo) | INACTIVE (pausada a mano).
+     * Se calcula en cada pedido con la hora actual.
+     */
     private String status;
+    /** Solo para mayores de 18. */
+    private boolean adultsOnly;
 
     private String location;
 

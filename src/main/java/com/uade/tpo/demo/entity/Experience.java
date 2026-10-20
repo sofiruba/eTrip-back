@@ -60,13 +60,10 @@ public class Experience {
     @Builder.Default
     private boolean active = true;
 
-    /**
-     * true si la pausó la tarea automática por quedarse sin fechas futuras (AutomaticTasks).
-     * Se vuelve a publicar sola al agregarle una fecha. Una pausa manual del anfitrión o el admin lo deja en false.
-     */
+    /** Solo para mayores de 18: con niños o bebés en la búsqueda no se muestra. */
     @Column(nullable = false)
     @Builder.Default
-    private boolean autoPaused = false;
+    private boolean adultsOnly = false;
 
     @OneToMany(mappedBy = "experience", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")

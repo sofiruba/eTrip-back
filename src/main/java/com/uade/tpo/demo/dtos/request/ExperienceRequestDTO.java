@@ -17,4 +17,6 @@ public class ExperienceRequestDTO {
     private BigDecimal price;
     private String location;
     private Long categoryId;
+    /** Solo para mayores de 18 (si no viene, false). */
+    private Boolean adultsOnly;
 }

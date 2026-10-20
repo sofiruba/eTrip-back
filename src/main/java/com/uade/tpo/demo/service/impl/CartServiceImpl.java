@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -53,6 +54,9 @@ public class CartServiceImpl implements CartService {
 
                     return cartRepository.save(newCart);
                 });
+
+        // Las fechas canceladas o que ya empezaron no se pueden comprar: se sacan al abrir el carrito
+        cartItemRepository.deleteUnavailable(cart.getId(), LocalDateTime.now());
 
         List<CartItemResponseDTO> itemDTOs = new ArrayList<>();
         // Calcula el total del carrito sumando los subtotales de cada item.

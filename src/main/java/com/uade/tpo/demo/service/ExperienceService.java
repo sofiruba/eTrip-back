@@ -17,19 +17,11 @@ import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
 public interface ExperienceService {
-    // Lista todas las experiencias sin filtrar.
-    Page<ExperienceResponseDTO> getExperiences(Pageable pageable);
-
-    // Busca experiencias combinando filtros opcionales.
-    Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable)
-            throws ResourceNotFoundException, BadRequestException;
-
+    // Busca experiencias combinando filtros opcionales (includeInactive: también las pausadas, para gestión).
     Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable, boolean includeInactive)
             throws ResourceNotFoundException, BadRequestException;
 
-    // Una experiencia puntual por id.
-    ExperienceResponseDTO getExperienceById(Long experienceId) throws ResourceNotFoundException;
-
+    // Una experiencia puntual por id (una pausada solo la ven su anfitrión y los administradores).
     ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser) throws ResourceNotFoundException;
 
     // Crea una experiencia nueva con sus fotos.

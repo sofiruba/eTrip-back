@@ -209,16 +209,23 @@ Base: `/experiences` · Rol `CLIENTE` o `ADMIN`.
 | Param | Efecto |
 |---|---|
 | `categoryId` | Categoría exacta. `404` si no existe. |
-| `title` | Coincidencia parcial en el título. |
+| `title` | Cada palabra tiene que estar en el título, el lugar o el nombre del anfitrión (sin importar mayúsculas ni acentos). |
 | `location` | Coincidencia parcial en la ubicación. |
-| `minPrice` / `maxPrice` | Rango de precio. `minPrice > maxPrice` → `400`. |
+| `minPrice` / `maxPrice` | Rango sobre el **precio final** (con descuento). `minPrice > maxPrice` → `400`. |
 | `publisherId` | Experiencias de un anfitrión puntual. |
 | `onlyDiscounted` | Solo con descuento de producto activo. |
-| `dateFrom` / `dateTo` | Al menos una sesión con `startsAt` en rango. |
+| `dateFrom` / `dateTo` | Días (`2027-01-31`): alguna fecha que empiece en ese rango. |
+| `guests` | Alguna fecha con al menos esos lugares libres. |
+| `onlyAvailable` | Alguna fecha con lugares libres. |
+| `durationMin` / `durationMax` | Duración de la fecha, en minutos. `durationMin > durationMax` → `400`. |
+| `timeSlots` | Franja de inicio, separadas por coma: `manana` (antes de las 12), `tarde` (12 a 17), `noche` (desde las 17). |
+| `withKids` | `true` = el grupo tiene niños o bebés: no muestra las experiencias solo para mayores de 18. |
+
+Fechas, personas, duración y horario se cumplen en **una misma fecha**. El catálogo público muestra solo experiencias publicadas con alguna fecha futura. Es toda la búsqueda del Home: el front solo ordena.
 
 **Body de `experience`:**
 ```json
-{ "title": "Pastas caseras", "description": "Amasado y salsa", "price": 5000, "location": "Palermo", "categoryId": 1 }
+{ "title": "Pastas caseras", "description": "Amasado y salsa", "price": 5000, "location": "Palermo, Buenos Aires", "categoryId": 1, "adultsOnly": false }
 ```
 
 **Reglas:**
@@ -331,7 +338,7 @@ experiencia antes; autor sale del token.
 
 ## Reglas de negocio destacadas
 
-- Filtros combinables en `GET /experiences` (hasta 7 a la vez, con AND).
+- Filtros combinables en `GET /experiences` (toda la búsqueda del catálogo, con AND).
 - `/orders` y `/bookings` filtran por JWT, no por parámetro de URL.
 - `/discount-coupons/validate` no gasta el cupón ni toca el carrito.
 - Sesión sin cupos → no se puede reservar/agregar al carrito.

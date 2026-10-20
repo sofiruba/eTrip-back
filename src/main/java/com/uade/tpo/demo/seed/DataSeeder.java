@@ -208,13 +208,13 @@ public class DataSeeder implements CommandLineRunner {
                 List<ExperienceSession> past = new ArrayList<>();
                 for (int daysAgo : new int[] { 8 + random.nextInt(12), 28 + random.nextInt(30) }) {
                     past.add(createSession(experience, now.minusDays(daysAgo), times.get(random.nextInt(times.size())),
-                            minutes, capacity, true));
+                            minutes, capacity));
                 }
                 List<ExperienceSession> upcoming = new ArrayList<>();
                 int[] daysAhead = { 1 + random.nextInt(5), 7 + random.nextInt(8), 17 + random.nextInt(12), 32 + random.nextInt(14) };
                 for (int i = 0; i < daysAhead.length; i++) {
                     upcoming.add(createSession(experience, now.plusDays(daysAhead[i]), times.get(i % times.size()),
-                            minutes, capacity, false));
+                            minutes, capacity));
                 }
                 sessionCount += past.size() + upcoming.size();
 
@@ -305,6 +305,7 @@ public class DataSeeder implements CommandLineRunner {
                 .price(BigDecimal.valueOf(node.get("price").asLong()))
                 .discountPercentage(BigDecimal.valueOf(node.path("discount").asInt(0)))
                 .location(node.get("location").asText())
+                .adultsOnly(node.path("adultsOnly").asBoolean(false))
                 .category(category)
                 .publisher(host)
                 .active(true)
@@ -327,7 +328,7 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     private ExperienceSession createSession(Experience experience, LocalDateTime day, String time, long minutes,
-            int capacity, boolean finished) {
+            int capacity) {
         LocalDateTime startsAt = day.with(LocalTime.parse(time));
         return sessionRepository.save(ExperienceSession.builder()
                 .experience(experience)
@@ -336,7 +337,6 @@ public class DataSeeder implements CommandLineRunner {
                 .capacity(capacity)
                 .availableSeats(capacity)
                 .active(true)
-                .finished(finished)
                 .build());
     }
 

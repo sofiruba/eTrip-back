@@ -326,8 +326,6 @@ public class OrderServiceImpl implements OrderService {
         if (order.getBookings() == null) {
             return BigDecimal.ZERO;
         }
-        BigDecimal subtotal = orZero(order.getSubtotal());
-        BigDecimal total = orZero(order.getTotal());
         BigDecimal refunded = BigDecimal.ZERO;
         for (Booking booking : order.getBookings()) {
             if (!booking.isRefunded()) {
@@ -336,16 +334,13 @@ public class OrderServiceImpl implements OrderService {
             Experience experience = booking.getExperienceSession() != null
                     ? booking.getExperienceSession().getExperience()
                     : null;
-            BigDecimal gross = orZero(BookingServiceImpl.paidUnitPrice(booking, experience))
-                    .multiply(BigDecimal.valueOf(booking.getQuantity() != null ? booking.getQuantity() : 0));
-            refunded = refunded.add(subtotal.signum() > 0
-                    ? gross.multiply(total).divide(subtotal, 2, RoundingMode.HALF_UP)
-                    : gross);
+            refunded = refunded.add(BookingServiceImpl.paidAmount(booking, experience));
         }
-        return refunded.min(total);
+        return refunded.min(orZero(order.getTotal()));
     }
 
-    private BigDecimal commissionOf(BigDecimal amount) {
+    // La comisión de PLAN sobre un monto; la usan las órdenes, las estadísticas y cada reserva.
+    public static BigDecimal commissionOf(BigDecimal amount) {
         return amount.multiply(PLAN_COMMISSION_RATE).setScale(2, RoundingMode.HALF_UP);
     }
 
@@ -381,7 +376,7 @@ public class OrderServiceImpl implements OrderService {
             for (Booking booking : bookings) {
                 ExperienceSession session = booking.getExperienceSession();
                 Experience experience = session != null ? session.getExperience() : null;
-                bookingDtos.add(BookingResponseDTO.builder()
+                bookingDtos.add(BookingServiceImpl.withEarnings(BookingResponseDTO.builder()
                         .id(booking.getId())
                         .voucherCode(booking.getVoucherCode())
                         .orderId(order.getId())
@@ -398,7 +393,7 @@ public class OrderServiceImpl implements OrderService {
                         .status(bookingStatus(booking, session))
                         .buyerId(buyer != null ? buyer.getId() : null)
                         .buyerName(buyerName(buyer))
-                        .build());
+                        .build(), booking, experience));
             }
         }
 
@@ -423,8 +418,6 @@ public class OrderServiceImpl implements OrderService {
         if (booking.isRefunded()) {
             return "REFUNDED";
         }
-        boolean ended = session != null
-                && (session.isFinished() || (session.getEndsAt() != null && session.getEndsAt().isBefore(LocalDateTime.now())));
-        return ended ? "COMPLETED" : "CONFIRMED";
+        return session != null && session.hasEnded() ? "COMPLETED" : "CONFIRMED";
     }
 }

@@ -193,14 +193,22 @@ o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_c
 
 | Param | Efecto |
 |---|---|
-| `categoryId` | categoría exacta (`404` si no existe) |
-| `title` / `location` | coincidencia parcial, case-insensitive |
-| `minPrice` / `maxPrice` | rango sobre el precio de lista (`minPrice>maxPrice` → `400`) |
-| `publisherId` | experiencias de un vendedor puntual |
-| `onlyDiscounted=true` | solo experiencias con descuento activo ("ofertas") |
-| `dateFrom` / `dateTo` | experiencias con una sesión en ese rango de fechas |
+| `categoryId` | Categoría exacta. `404` si no existe. |
+| `title` | Cada palabra tiene que estar en el título, el lugar o el nombre del anfitrión (sin importar mayúsculas ni acentos). |
+| `location` | Coincidencia parcial en la ubicación. |
+| `minPrice` / `maxPrice` | Rango sobre el **precio final** (con descuento). `minPrice > maxPrice` → `400`. |
+| `publisherId` | Experiencias de un anfitrión puntual. |
+| `onlyDiscounted` | Solo con descuento de producto activo. |
+| `dateFrom` / `dateTo` | Días (`2027-01-31`): alguna fecha que empiece en ese rango. |
+| `guests` | Alguna fecha con al menos esos lugares libres. |
+| `onlyAvailable` | Alguna fecha con lugares libres. |
+| `durationMin` / `durationMax` | Duración de la fecha, en minutos. `durationMin > durationMax` → `400`. |
+| `timeSlots` | Franja de inicio, separadas por coma: `manana` (antes de las 12), `tarde` (12 a 17), `noche` (desde las 17). |
+| `withKids` | `true` = el grupo tiene niños o bebés: no muestra las experiencias solo para mayores de 18. |
 
-Ejemplo: `/experiences?location=Palermo&minPrice=1000&maxPrice=50000&onlyDiscounted=true`
+Fechas, personas, duración y horario se cumplen en **una misma fecha**. El catálogo público muestra solo experiencias publicadas con alguna fecha futura. Es toda la búsqueda del Home: el front solo ordena.
+
+Ejemplo: `/experiences?location=Palermo&minPrice=1000&maxPrice=50000&dateFrom=2027-01-01&dateTo=2027-12-31&guests=2&timeSlots=tarde,noche&withKids=true`
 
 ### POST / PUT — multipart/form-data
 Dos tipos de parte:

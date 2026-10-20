@@ -51,15 +51,15 @@ public class ExperienceSession {
     @Builder.Default
     private boolean active = true;
 
-    /** true cuando la fecha ya terminó. Lo marca solo la tarea automática (AutomaticTasks). */
-    @Column(nullable = false)
-    @Builder.Default
-    private boolean finished = false;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "experience_id", nullable = false)
     private Experience experience;
 
     @OneToMany(mappedBy = "experienceSession")
     private List<Booking> bookings;
+
+    /** true si la fecha ya terminó. Se calcula con la hora en cada pedido (no hay ninguna tarea que la marque). */
+    public boolean hasEnded() {
+        return endsAt != null && endsAt.isBefore(LocalDateTime.now());
+    }
 }

@@ -3,7 +3,7 @@ package com.uade.tpo.demo.controllers.experiences;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -45,7 +45,7 @@ public class ExperiencesController {
     private final ExperienceService experienceService;
     private final ObjectMapper objectMapper;
 
-    // Busca experiencias combinando filtros opcionales (categoría, texto, ubicación, precio, vendedor, fechas, ofertas).
+    // Busca experiencias combinando filtros opcionales. Es la búsqueda completa del catálogo: el front solo ordena.
     @GetMapping
     public ResponseEntity<Page<ExperienceResponseDTO>> getExperiences(
             @RequestParam(required = false) Integer page,
@@ -57,8 +57,14 @@ public class ExperiencesController {
             @RequestParam(required = false) BigDecimal maxPrice,
             @RequestParam(required = false) Long publisherId,
             @RequestParam(required = false) Boolean onlyDiscounted,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime dateTo,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) Integer guests,
+            @RequestParam(required = false) Boolean onlyAvailable,
+            @RequestParam(required = false) Integer durationMin,
+            @RequestParam(required = false) Integer durationMax,
+            @RequestParam(required = false) List<String> timeSlots,
+            @RequestParam(required = false) Boolean withKids,
             @RequestParam(defaultValue = "false") boolean includeInactive,
             @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException, BadRequestException {
@@ -72,6 +78,12 @@ public class ExperiencesController {
                 .onlyDiscounted(onlyDiscounted)
                 .dateFrom(dateFrom)
                 .dateTo(dateTo)
+                .guests(guests)
+                .onlyAvailable(onlyAvailable)
+                .durationMin(durationMin)
+                .durationMax(durationMax)
+                .timeSlots(timeSlots)
+                .withKids(withKids)
                 .build();
 
         boolean canIncludeInactive = includeInactive && currentUser != null

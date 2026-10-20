@@ -103,11 +103,6 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
 
         ExperienceSession savedSession = experienceSessionRepository.save(session);
 
-        // Si la experiencia estaba pausada automáticamente por no tener fechas, con esta fecha se vuelve a publicar
-        if (experience.isAutoPaused()) {
-            experience.setActive(true);
-            experience.setAutoPaused(false);
-        }
         return mapToResponseDTO(savedSession);
     }
 
@@ -126,7 +121,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         if (!session.isActive()) {
             throw new BadRequestException("No se puede modificar una fecha cancelada");
         }
-        if (session.isFinished()) {
+        if (session.hasEnded()) {
             throw new BadRequestException("No se puede modificar una fecha que ya terminó");
         }
         assertCanManage(session.getExperience(), currentUser);
@@ -188,7 +183,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         if (!session.isActive()) {
             throw new BadRequestException("Esta fecha ya está cancelada");
         }
-        if (session.isFinished()) {
+        if (session.hasEnded()) {
             throw new BadRequestException("No se puede cancelar una fecha que ya terminó");
         }
         if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
@@ -230,9 +225,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         assertCanManage(session.getExperience(), currentUser);
 
         // "Terminada" es que ya pasó la hora de fin: una fecha que empezó pero sigue en curso todavía no se toca
-        LocalDateTime now = LocalDateTime.now();
-        boolean ended = session.isFinished() || (session.getEndsAt() != null && session.getEndsAt().isBefore(now));
-        if (session.isActive() && !ended) {
+        if (session.isActive() && !session.hasEnded()) {
             throw new BadRequestException("Esta fecha sigue vigente o en curso: si todavía no empezó, cancelala "
                     + "(se reembolsa sola) y después la podés eliminar");
         }
@@ -342,7 +335,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .availableSeats(session.getAvailableSeats())
                 .active(session.isActive())
                 .status(status(session))
-                .editable(session.isActive() && !session.isFinished() && session.getStartsAt().isAfter(LocalDateTime.now()))
+                .editable(session.isActive() && session.getStartsAt().isAfter(LocalDateTime.now()))
                 .build();
     }
 
@@ -351,7 +344,8 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         if (!session.isActive()) {
             return "CANCELLED";
         }
-        if (session.isFinished() || session.getStartsAt().isBefore(LocalDateTime.now())) {
+        // Ya empezó o terminó (se calcula con la hora, no hay ninguna tarea que la marque)
+        if (session.getStartsAt().isBefore(LocalDateTime.now())) {
             return "FINISHED";
         }
         if (session.getAvailableSeats() == null || session.getAvailableSeats() == 0) {

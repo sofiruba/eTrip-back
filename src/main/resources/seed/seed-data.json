@@ -107,13 +107,13 @@
       "username": "joaco.vinos", "firstname": "Joaquín", "lastname": "Videla", "email": "joaquin@plan.com",
       "experiences": [
         {
-          "slug": "bodega-lujan", "title": "Bodegas de Luján de Cuyo en bici", "category": "Gastronomía",
+          "slug": "bodega-lujan", "adultsOnly": true, "title": "Bodegas de Luján de Cuyo en bici", "category": "Gastronomía",
           "location": "Luján de Cuyo, Mendoza", "price": 72000, "hours": 6, "times": ["09:30"], "capacity": 12,
           "photo": "Luján de Cuyo viñedos",
           "description": "Pedaleamos entre viñedos con la cordillera de fondo y visitamos tres bodegas: una centenaria, una boutique y una de vinos naturales. Degustaciones y almuerzo de campo incluidos."
         },
         {
-          "slug": "cata-ciegas", "title": "Cata a ciegas de vinos naturales", "category": "Gastronomía",
+          "slug": "cata-ciegas", "adultsOnly": true, "title": "Cata a ciegas de vinos naturales", "category": "Gastronomía",
           "location": "Chacarita, Buenos Aires", "price": 26000, "hours": 2, "times": ["20:00"], "capacity": 14,
           "photo": "Wine tasting glasses",
           "description": "Probamos cinco vinos naturales sin ver la etiqueta y jugamos a adivinar cepa, región y precio. Una forma divertida de aprender sin solemnidad, con quesos y fiambres de productores chicos."
@@ -205,7 +205,7 @@
           "description": "Tres bares de jazz que no tienen cartel: entramos por una heladera, una librería y una puerta sin número. Música en vivo, un trago en cada parada y las historias de cada lugar."
         },
         {
-          "slug": "speakeasy", "title": "Coctelería de autor: los speakeasy", "category": "Música y noche",
+          "slug": "speakeasy", "adultsOnly": true, "title": "Coctelería de autor: los speakeasy", "category": "Música y noche",
           "location": "Recoleta, Buenos Aires", "price": 42000, "discount": 15, "hours": 3, "times": ["21:00"], "capacity": 10,
           "photo": "cocktail bar bartender",
           "description": "Buenos Aires tiene varios de los mejores bares del mundo. Visitamos dos y un bartender nos enseña a preparar un clásico porteño con fernet y vermut."
