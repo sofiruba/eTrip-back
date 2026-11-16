@@ -24,6 +24,7 @@ import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.service.BookingService;
 import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.VoucherImageService;
 import com.uade.tpo.demo.service.WaitlistService;
 
 import jakarta.persistence.EntityManager;
@@ -43,6 +44,7 @@ public class BookingServiceImpl implements BookingService {
     private final NotificationService notificationService;
     private final WaitlistService waitlistService;
     private final EntityManager entityManager;
+    private final VoucherImageService voucherImageService;
 
     // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
@@ -52,7 +54,7 @@ public class BookingServiceImpl implements BookingService {
         Page<Booking> bookings = isAdmin(user)
                 ? bookingRepository.findAll(pageable)
                 : bookingRepository.findByOrder_User_IdOrRecipient_Id(user.getId(), user.getId(), pageable);
-        return bookings.map(this::toResponse);
+        return bookings.map(booking -> forViewer(toResponse(booking), booking, user));
     }
 
     // Vista vendedor: reservas hechas sobre experiencias que publicó este usuario.
@@ -109,7 +111,7 @@ public class BookingServiceImpl implements BookingService {
             throw new ForbiddenException("No tenés acceso a esta reserva");
         }
 
-        return toResponse(booking);
+        return forViewer(toResponse(booking), booking, user);
     }
 
     @Override
@@ -171,11 +173,47 @@ public class BookingServiceImpl implements BookingService {
         }
         // Se liberaron lugares: les avisamos a los que estaban en lista de espera
         waitlistService.notifySeatsAvailable(session);
-        return toResponse(saved);
+        return forViewer(toResponse(saved), saved, user);
     }
 
     private boolean isAdmin(User user) {
         return user != null && user.getRole() == Role.ADMIN;
+    }
+
+    // El voucher como imagen (PNG) para descargarlo o compartirlo. Solo lo puede pedir quien lo tiene:
+    // quien compró o, si fue un regalo ya entregado, quien lo recibió (ni siquiera quien lo pagó).
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] getVoucherImage(Long bookingId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        Booking booking = bookingRepository.findById(bookingId)
+                .orElseThrow(() -> new ResourceNotFoundException("La reserva no existe"));
+        User holder = holderOf(booking);
+        if (holder == null || !holder.getId().equals(user.getId())) {
+            throw new ForbiddenException("El voucher solo lo puede descargar quien lo tiene");
+        }
+        if (booking.isRefunded()) {
+            throw new BadRequestException("Este voucher fue anulado por el reembolso");
+        }
+        return voucherImageService.render(booking, holder);
+    }
+
+    // De quién es el voucher: de quien recibió el regalo (si ya se le entregó) o de quien compró
+    static User holderOf(Booking booking) {
+        if (booking.getRecipient() != null) {
+            return booking.getRecipient();
+        }
+        return booking.getOrder() != null ? booking.getOrder().getUser() : null;
+    }
+
+    // Quien regaló no ve el código de un voucher que ya es de otra persona (sí el anfitrión, que lo valida, y el admin)
+    static BookingResponseDTO forViewer(BookingResponseDTO dto, Booking booking, User viewer) {
+        boolean giftedAway = booking.getRecipient() != null && !booking.getRecipient().getId().equals(viewer.getId())
+                && booking.getOrder() != null && booking.getOrder().getUser().getId().equals(viewer.getId());
+        if (giftedAway) {
+            dto.setVoucherCode(null);
+        }
+        return dto;
     }
 
     private BookingResponseDTO toResponse(Booking booking) {

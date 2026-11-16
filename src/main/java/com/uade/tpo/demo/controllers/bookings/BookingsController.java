@@ -4,6 +4,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,6 +64,18 @@ public class BookingsController {
             @PathVariable Long bookingId,
             @AuthenticationPrincipal User user) throws ResourceNotFoundException, ForbiddenException {
         return ResponseEntity.ok(bookingService.getBookingById(bookingId, user));
+    }
+
+    // El voucher como imagen PNG (para descargarlo o compartirlo). Solo quien lo tiene.
+    @GetMapping("/{bookingId}/voucher")
+    public ResponseEntity<byte[]> getVoucher(
+            @PathVariable Long bookingId,
+            @AuthenticationPrincipal User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_PNG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"voucher-reserva-" + bookingId + ".png\"")
+                .body(bookingService.getVoucherImage(bookingId, user));
     }
 
     @PostMapping("/{bookingId}/refund")

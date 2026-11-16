@@ -24,6 +24,10 @@ public interface BookingService {
     BookingResponseDTO getBookingById(Long bookingId, User user)
             throws ResourceNotFoundException, ForbiddenException;
 
+    // El voucher como imagen PNG: solo para quien lo tiene
+    byte[] getVoucherImage(Long bookingId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
+
     BookingResponseDTO refundBooking(Long bookingId, User user)
             throws ResourceNotFoundException, ForbiddenException, BadRequestException;
 }

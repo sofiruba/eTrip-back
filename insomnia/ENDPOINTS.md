@@ -517,7 +517,12 @@ también `refunded` y `commission` (10% de PLAN).
 | GET | `/bookings/sales?page=0&size=10` | **Modo vendedor:** reservas sobre las experiencias que publiqué, con `buyerId`/`buyerName`. |
 | GET | `/bookings/experience/{experienceId}?page=0&size=10` | Reservas de una experiencia puntual. Solo el dueño de esa experiencia o ADMIN (403/404 si no). |
 | GET | `/bookings/{bookingId}` | Una reserva. La ve el comprador, el vendedor de esa experiencia, o ADMIN. |
+| GET | `/bookings/{bookingId}/voucher` | El voucher como **imagen PNG** (`Content-Disposition: attachment`), para descargarlo o compartirlo. **Solo quien lo tiene:** quien compró o, si fue un regalo ya entregado, quien lo recibió (`403` para cualquier otro, incluso quien pagó el regalo). `400` si se reembolsó. Lo dibuja el back con Java2D (`VoucherImageService`). |
 | POST | `/bookings/{bookingId}/refund` | Cancela la reserva con reembolso y devuelve los lugares a la sesión. Ver política abajo. |
+
+**Código del voucher:** cuando un regalo ya se entregó, quien lo pagó deja de recibir `voucherCode` (viene `null`) en
+`/bookings`, `/bookings/{id}` y en sus órdenes: el voucher es de quien lo recibió. El anfitrión lo sigue viendo en
+`/bookings/sales` (lo valida al llegar).
 
 Las reservas se generan en el checkout (`POST /orders`).
 

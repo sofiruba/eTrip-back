@@ -450,7 +450,8 @@ public class OrderServiceImpl implements OrderService {
                 Experience experience = session != null ? session.getExperience() : null;
                 bookingDtos.add(BookingServiceImpl.withEarnings(BookingResponseDTO.builder()
                         .id(booking.getId())
-                        .voucherCode(booking.getVoucherCode())
+                        // Un regalo ya entregado: el voucher es de quien lo recibió, quien pagó no ve el código
+                        .voucherCode(booking.getRecipient() != null ? null : booking.getVoucherCode())
                         .orderId(order.getId())
                         .experienceSessionId(session != null ? session.getId() : null)
                         .experienceId(experience != null ? experience.getId() : null)
