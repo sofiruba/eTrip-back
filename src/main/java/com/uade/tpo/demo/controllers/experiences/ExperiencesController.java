@@ -30,6 +30,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
+import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -110,6 +111,15 @@ public class ExperiencesController {
                 .build();
 
         return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size), true, false));
+    }
+
+    // "Para vos": recomendaciones para el usuario logueado, con el motivo de cada una (las calcula el back).
+    // viewed = ids de las experiencias que vio hace poco (ese historial vive en su navegador).
+    @GetMapping("/recommended")
+    public ResponseEntity<List<RecommendationResponseDTO>> getRecommended(
+            @RequestParam(required = false) List<Long> viewed,
+            @AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(experienceService.recommend(currentUser, viewed));
     }
 
     // Una experiencia puntual por id.

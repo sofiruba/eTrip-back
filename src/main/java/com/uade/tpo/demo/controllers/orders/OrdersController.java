@@ -6,7 +6,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,6 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.uade.tpo.demo.dtos.request.GiftRequestDTO;
 import com.uade.tpo.demo.dtos.request.OrderRequestDTO;
 import com.uade.tpo.demo.dtos.response.OrderResponseDTO;
 import com.uade.tpo.demo.dtos.response.OrderStatsDTO;
@@ -58,6 +61,25 @@ public class OrdersController {
             @AuthenticationPrincipal User user)
             throws ResourceNotFoundException, ForbiddenException, BadRequestException {
         return ResponseEntity.ok(orderService.cancelOrder(orderId, user));
+    }
+
+    // Regalo pendiente: quien pagó corrige el email de quien lo recibe (se le vuelve a mandar la invitación).
+    @PatchMapping("/{orderId}/gift")
+    public ResponseEntity<OrderResponseDTO> updateGiftEmail(
+            @PathVariable Long orderId,
+            @RequestBody GiftRequestDTO request,
+            @AuthenticationPrincipal User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok(orderService.updateGiftEmail(orderId, request.getRecipientEmail(), user));
+    }
+
+    // Regalo pendiente: quien pagó se lo queda (pasa a ser una compra común).
+    @DeleteMapping("/{orderId}/gift")
+    public ResponseEntity<OrderResponseDTO> cancelGift(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        return ResponseEntity.ok(orderService.cancelGift(orderId, user));
     }
 
     // Una orden puntual; solo la ve el dueño o un ADMIN.

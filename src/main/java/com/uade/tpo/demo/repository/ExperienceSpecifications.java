@@ -42,9 +42,9 @@ public final class ExperienceSpecifications {
                 // Las eliminadas por su anfitrión solo las ve el admin, como historial
                 predicates.add(cb.isNull(root.get("deletedAt")));
             }
-            // Etiquetas: alguna de las pedidas ("Para vos" con los intereses del usuario)
+            // Intereses: alguno de los pedidos, por nombre (?tags=Vinos,Gastronomía)
             if (f.getTags() != null && !f.getTags().isEmpty()) {
-                predicates.add(root.join("tags", JoinType.INNER).in(f.getTags()));
+                predicates.add(root.join("tags", JoinType.INNER).get("name").in(f.getTags()));
                 query.distinct(true);
             }
             if (f.getCategoryId() != null) {

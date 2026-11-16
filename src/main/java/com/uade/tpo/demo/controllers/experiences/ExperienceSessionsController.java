@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
+import com.uade.tpo.demo.dtos.response.HostAgendaItemDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -70,6 +71,12 @@ public class ExperienceSessionsController {
     public ResponseEntity<List<ExperienceSessionResponseDTO>> getManagedSessions(
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(experienceSessionService.getManagedSessions(currentUser));
+    }
+
+    // "Fechas y huéspedes" del anfitrión: un resumen por cada una de sus experiencias (lo calcula el back).
+    @GetMapping("/manage/summary")
+    public ResponseEntity<List<HostAgendaItemDTO>> getHostAgenda(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(experienceSessionService.getHostAgenda(currentUser));
     }
 
     // Lista de espera: en qué fechas agotadas está anotado el usuario (ids).

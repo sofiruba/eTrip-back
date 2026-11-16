@@ -24,4 +24,7 @@ public interface BookingRepository extends JpaRepository<Booking, Long> {
 
     java.util.List<Booking> findByExperienceSession_Id(Long sessionId);
 
+    // Regalos a un email que todavía no tienen dueño (quien los recibe no tenía cuenta al momento de la compra)
+    java.util.List<Booking> findByRecipientIsNullAndOrder_GiftRecipientEmailIgnoreCase(String email);
+
 }

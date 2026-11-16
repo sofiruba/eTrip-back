@@ -32,4 +32,6 @@ public class OrderResponseDTO {
     private String giftRecipientName;
     private String giftRecipientEmail;
     private String giftMessage;
+    /** Si es un regalo: PENDING (esperando que quien lo recibe tenga cuenta verificada con ese email), DELIVERED (ya es suyo) o IN_PERSON (sin email: se entrega en mano). */
+    private String giftStatus;
 }

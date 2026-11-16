@@ -43,15 +43,16 @@ public class SecurityConfig {
                                                 .requestMatchers("/error/**").permitAll()
                                 .requestMatchers("/users/me").hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                 // GET que piden sesión aunque estén bajo prefijos públicos (tienen que ir antes del permitAll)
-                                .requestMatchers(HttpMethod.GET, "/experiences/mine", "/experience-sessions/manage",
+                                .requestMatchers(HttpMethod.GET, "/experiences/mine", "/experiences/recommended",
+                                                "/experience-sessions/manage", "/experience-sessions/manage/summary",
                                                 "/experience-sessions/waitlist/mine")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
-                                .requestMatchers(HttpMethod.GET, "/experiences/**", "/experience-categories/**",
+                                .requestMatchers(HttpMethod.GET, "/experiences/**", "/experience-categories/**", "/interests/**",
                                                 "/experience-sessions/**", "/reviews/experience/**", "/users/*").permitAll()
                                                 .requestMatchers("/users/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
-                                                // Las categorías se leen sin sesión (GET de arriba); crearlas, editarlas o borrarlas es del admin
-                                                .requestMatchers("/experience-categories/**")
+                                                // Las categorías y los intereses se leen sin sesión (GET de arriba); crearlos, editarlos o borrarlos es del admin
+                                                .requestMatchers("/experience-categories/**", "/interests/**")
                                                 .hasAnyAuthority(Role.ADMIN.name())
                                                 .requestMatchers("/experiences/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())

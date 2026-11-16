@@ -44,6 +44,8 @@ public class BookingResponseDTO {
     private String giftRecipientName;
     private String giftMessage;
     private String giftFromName;
+    /** Si es un regalo: PENDING (esperando que quien lo recibe tenga cuenta verificada con ese email), DELIVERED (ya es suyo) o IN_PERSON (sin email: se entrega en mano). */
+    private String giftStatus;
     /** El usuario que recibió el regalo (si tiene cuenta). */
     private Long recipientId;
 }

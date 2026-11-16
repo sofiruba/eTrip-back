@@ -66,7 +66,7 @@ public class ExperienceCategoriesController {
         return ResponseEntity.ok(experienceCategoryService.updateCategory(categoryId, request));
     }
 
-    // Borra una categoría; falla si todavía tiene experiencias asociadas.
+    // Borra una categoría; falla si todavía tiene experiencias o intereses asociados.
     @DeleteMapping("/{categoryId}")
     public ResponseEntity<Void> deleteCategory(@PathVariable Long categoryId)
             throws ResourceNotFoundException, BadRequestException {
