@@ -24,4 +24,6 @@ public class ExperienceSessionResponseDTO {
     private String status;
     /** Si todavía se puede editar o cancelar (activa, sin terminar y futura). */
     private boolean editable;
+    /** Personas anotadas para que les avisen si se libera un lugar. */
+    private long waitlistCount;
 }

@@ -25,6 +25,7 @@ import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.service.ExperienceSessionService;
 import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.WaitlistService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -40,6 +41,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     private final NotificationService notificationService;
     private final CartItemRepository cartItemRepository;
     private final EntityManager entityManager;
+    private final WaitlistService waitlistService;
 
     // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
@@ -154,18 +156,20 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         validateFutureStart(session.getStartsAt());
         validateNoOverlap(session.getExperience().getId(), session.getId(), session.getStartsAt(), session.getEndsAt());
 
+        boolean wasSoldOut = session.getAvailableSeats() != null && session.getAvailableSeats() == 0;
         if (request.getCapacity() != null) {
             Integer bookedSeats = calculateBookedSeats(session);
-
             if (request.getCapacity() < bookedSeats) {
                 throw new BadRequestException("El cupo no puede ser menor a los " + bookedSeats + " lugares ya reservados");
             }
-
             session.setCapacity(request.getCapacity());
             session.setAvailableSeats(request.getCapacity() - bookedSeats);
         }
-
         ExperienceSession savedSession = experienceSessionRepository.save(session);
+        // Estaba agotada y el anfitrión amplió el cupo: les avisamos a los que esperaban un lugar
+        if (wasSoldOut && savedSession.getAvailableSeats() != null && savedSession.getAvailableSeats() > 0) {
+            waitlistService.notifySeatsAvailable(savedSession);
+        }
         return mapToResponseDTO(savedSession);
     }
 
@@ -209,6 +213,8 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                     session.getCapacity() == null ? releasedSeats : session.getCapacity(),
                     (session.getAvailableSeats() == null ? 0 : session.getAvailableSeats()) + releasedSeats));
         }
+        // Los que esperaban un lugar también se enteran
+        waitlistService.notifySessionCancelled(session);
         session.setActive(false);
         experienceSessionRepository.save(session);
     }
@@ -235,6 +241,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         }
 
         cartItemRepository.deleteByExperienceSessionId(sessionId);
+        waitlistService.clear(sessionId);
         experienceSessionRepository.delete(session);
     }
 
@@ -336,6 +343,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .active(session.isActive())
                 .status(status(session))
                 .editable(session.isActive() && session.getStartsAt().isAfter(LocalDateTime.now()))
+                .waitlistCount(waitlistService.count(session.getId()))
                 .build();
     }
 

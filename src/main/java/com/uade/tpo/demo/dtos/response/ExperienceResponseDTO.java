@@ -25,7 +25,8 @@ public class ExperienceResponseDTO {
     private BigDecimal finalPrice;
     private boolean active;
     /**
-     * ACTIVE | NO_DATES (publicada pero sin fechas futuras: no aparece en el catálogo) | INACTIVE (pausada a mano).
+     * ACTIVE | NO_DATES (publicada pero sin fechas futuras: no aparece en el catálogo) | INACTIVE (pausada a mano)
+     * | DELETED (eliminada por el anfitrión; queda solo para el historial del admin).
      * Se calcula en cada pedido con la hora actual.
      */
     private String status;
@@ -43,4 +44,8 @@ public class ExperienceResponseDTO {
     private String publisherName;
     private Double averageRating;
     private Integer reviewCount;
+    /** Etiquetas (intereses) de la experiencia. */
+    private List<String> tags;
+    /** Cuántas personas la guardaron en favoritos. */
+    private Long favoriteCount;
 }

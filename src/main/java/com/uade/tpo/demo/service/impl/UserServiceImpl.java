@@ -5,6 +5,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashSet;
+import java.util.List;
+
 import com.uade.tpo.demo.dtos.request.UserUpdateDTO;
 import com.uade.tpo.demo.dtos.response.UserResponseDTO;
 import com.uade.tpo.demo.entity.Role;
@@ -38,7 +43,8 @@ public class UserServiceImpl implements UserService {
         return toResponse(user, true);
     }
 
-    // Edita mi nombre/apellido.
+    // Edita mi perfil: nombre y apellido, y lo público (presentación, ciudad, foto, intereses).
+    // Un campo que no viene se deja como está; un texto vacío lo borra.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public UserResponseDTO updateMyProfile(User currentUser, UserUpdateDTO request) throws BadRequestException {
@@ -47,12 +53,8 @@ public class UserServiceImpl implements UserService {
         }
         User user = userRepository.findById(currentUser.getId())
                 .orElseThrow(() -> new IllegalStateException("Usuario autenticado inexistente"));
-
         String firstName = trimToNull(request.getFirstName());
         String lastName = trimToNull(request.getLastName());
-        if (firstName == null && lastName == null) {
-            throw new BadRequestException("Completá el nombre o el apellido");
-        }
         if ((firstName != null && firstName.length() > 100) || (lastName != null && lastName.length() > 100)) {
             throw new BadRequestException("El nombre y el apellido pueden tener hasta 100 caracteres");
         }
@@ -62,8 +64,67 @@ public class UserServiceImpl implements UserService {
         if (lastName != null) {
             user.setLastName(lastName);
         }
-
+        if (request.getBio() != null) {
+            String bio = trimToNull(request.getBio());
+            if (bio != null && bio.length() > 500) {
+                throw new BadRequestException("La presentación puede tener hasta 500 caracteres");
+            }
+            user.setBio(bio);
+        }
+        if (request.getCity() != null) {
+            String city = trimToNull(request.getCity());
+            if (city != null && city.length() > 100) {
+                throw new BadRequestException("La ciudad puede tener hasta 100 caracteres");
+            }
+            user.setCity(city);
+        }
+        if (request.getAvatarBase64() != null) {
+            user.setAvatar(decodeAvatar(request.getAvatarBase64()));
+        }
+        if (request.getInterests() != null) {
+            user.setInterests(cleanInterests(request.getInterests()));
+        }
         return toResponse(userRepository.save(user), true);
+    }
+
+    // Foto de perfil: viene como data URL ("data:image/jpeg;base64,...") o base64 pelado; vacío = sin foto.
+    // El front la achica a 320 px antes de mandarla; igual se pone un tope.
+    private byte[] decodeAvatar(String value) throws BadRequestException {
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        int comma = trimmed.indexOf(',');
+        String base64 = trimmed.startsWith("data:") && comma != -1 ? trimmed.substring(comma + 1) : trimmed;
+        byte[] bytes;
+        try {
+            bytes = Base64.getDecoder().decode(base64);
+        } catch (IllegalArgumentException ex) {
+            throw new BadRequestException("La foto de perfil no es válida");
+        }
+        if (bytes.length > 400 * 1024) {
+            throw new BadRequestException("La foto de perfil es demasiado grande");
+        }
+        return bytes;
+    }
+
+    /** Intereses sin repetir ni espacios de más, hasta 20 de hasta 40 caracteres (lo usan el perfil y el registro). */
+    public static List<String> cleanInterests(List<String> raw) throws BadRequestException {
+        LinkedHashSet<String> clean = new LinkedHashSet<>();
+        for (String interest : raw) {
+            if (interest == null || interest.isBlank()) {
+                continue;
+            }
+            String trimmed = interest.trim();
+            if (trimmed.length() > 40) {
+                throw new BadRequestException("Cada interés puede tener hasta 40 caracteres");
+            }
+            clean.add(trimmed);
+        }
+        if (clean.size() > 20) {
+            throw new BadRequestException("Podés elegir hasta 20 intereses");
+        }
+        return new ArrayList<>(clean);
     }
 
     // Perfil de otro usuario; datos completos solo si sos vos mismo o ADMIN.
@@ -154,7 +215,11 @@ public class UserServiceImpl implements UserService {
                 .username(user.getDisplayUsername())
                 .firstName(user.getFirstName())
                 .lastName(user.getLastName())
-                .publishedExperiences(experienceRepository.countByPublisherId(user.getId()));
+                .bio(user.getBio())
+                .city(user.getCity())
+                .avatarBase64(user.getAvatar() != null ? Base64.getEncoder().encodeToString(user.getAvatar()) : null)
+                .interests(user.getInterests() != null ? new ArrayList<>(user.getInterests()) : List.of())
+                .publishedExperiences(experienceRepository.countByPublisherIdAndDeletedAtIsNull(user.getId()));
 
         if (includePrivate) {
             builder.role(user.getRole() != null ? user.getRole().name() : null)

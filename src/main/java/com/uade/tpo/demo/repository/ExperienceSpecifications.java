@@ -30,12 +30,22 @@ public final class ExperienceSpecifications {
     private ExperienceSpecifications() {
     }
 
-    public static Specification<Experience> withFilters(ExperienceSearchDTO f, boolean includeInactive) {
+    public static Specification<Experience> withFilters(ExperienceSearchDTO f, boolean includeInactive,
+            boolean includeDeleted) {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (!includeInactive) {
                 // Catálogo público: solo publicadas
                 predicates.add(cb.isTrue(root.get("active")));
+            }
+            if (!includeDeleted) {
+                // Las eliminadas por su anfitrión solo las ve el admin, como historial
+                predicates.add(cb.isNull(root.get("deletedAt")));
+            }
+            // Etiquetas: alguna de las pedidas ("Para vos" con los intereses del usuario)
+            if (f.getTags() != null && !f.getTags().isEmpty()) {
+                predicates.add(root.join("tags", JoinType.INNER).in(f.getTags()));
+                query.distinct(true);
             }
             if (f.getCategoryId() != null) {
                 predicates.add(cb.equal(root.get("category").get("id"), f.getCategoryId()));

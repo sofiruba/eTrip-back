@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.dtos.response;
 
+import java.util.List;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -14,6 +16,11 @@ public class UserResponseDTO {
     private String username;
     private String firstName;
     private String lastName;
+    /** Perfil público: presentación, ciudad, foto (base64 JPEG) e intereses. Los ven todos. */
+    private String bio;
+    private String city;
+    private String avatarBase64;
+    private List<String> interests;
     /** Rol y estado: solo en el propio perfil o para ADMIN (así no se puede buscar quién es admin recorriendo ids). */
     private String role;
     private Boolean active;

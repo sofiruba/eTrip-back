@@ -26,6 +26,7 @@ import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.PasswordResetCodeRepository;
 import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.service.impl.UserServiceImpl;
 
 import lombok.RequiredArgsConstructor;
 
@@ -87,6 +88,7 @@ public class AuthenticationService {
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.CLIENTE)
+                .interests(request.getInterests() != null ? UserServiceImpl.cleanInterests(request.getInterests()) : null)
                 .build();
 
         repository.save(user);

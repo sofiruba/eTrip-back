@@ -36,6 +36,8 @@ import com.uade.tpo.demo.repository.CartRepository;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
+import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.dtos.request.GiftRequestDTO;
 import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.BookingService;
 import com.uade.tpo.demo.service.NotificationService;
@@ -62,6 +64,7 @@ public class OrderServiceImpl implements OrderService {
     private final NotificationService notificationService;
     private final EntityManager entityManager;
     private final BookingService bookingService;
+    private final UserRepository userRepository;
 
     // Mis órdenes; ADMIN ve las de todos.
     @Override
@@ -223,7 +226,11 @@ public class OrderServiceImpl implements OrderService {
                     + "Revisá el nuevo total y confirmá de nuevo.");
         }
         long totalTickets = items.stream().mapToLong(CartItem::getQuantity).sum();
-
+        // ¿Es un regalo? Se valida acá (antes de tocar cupos) y, si el destinatario tiene cuenta, se le asignan las reservas
+        GiftRequestDTO gift = cleanGift(request != null ? request.getGift() : null);
+        User recipient = gift != null && gift.getRecipientEmail() != null
+                ? userRepository.findByEmail(gift.getRecipientEmail()).filter(found -> !found.getId().equals(user.getId())).orElse(null)
+                : null;
         // Crea la orden, genera un Booking por cada item, descuenta los cupos de las sesiones y vacía el carrito.
         Order order = Order.builder()
                 .user(user)
@@ -233,6 +240,9 @@ public class OrderServiceImpl implements OrderService {
                 .total(total)
                 .count(totalTickets)
                 .createdAt(LocalDateTime.now())
+                .giftRecipientName(gift != null ? gift.getRecipientName() : null)
+                .giftRecipientEmail(gift != null ? gift.getRecipientEmail() : null)
+                .giftMessage(gift != null ? gift.getMessage() : null)
                 .build();
         order = orderRepository.save(order);
 
@@ -250,11 +260,22 @@ public class OrderServiceImpl implements OrderService {
                     .unitPrice(experience.getEffectivePrice())
                     .voucherCode(generateVoucherCode())
                     .createdAt(LocalDateTime.now())
+                    .recipient(recipient)
                     .build();
             bookings.add(bookingRepository.save(booking));
-
-            notificationService.create(user, "Reserva confirmada",
-                    "Tu reserva para \"" + experience.getTitle() + "\" fue confirmada.");
+            if (gift != null) {
+                notificationService.create(user, "Regalo confirmado",
+                        "Tu regalo de \"" + experience.getTitle() + "\" para " + gift.getRecipientName() + " está confirmado. "
+                                + "El voucher está en Mis reservas.");
+                if (recipient != null) {
+                    notificationService.create(recipient, "¡Te regalaron una experiencia!",
+                            user.getFirstName() + " te regaló \"" + experience.getTitle() + "\". "
+                                    + "Ya está en tus reservas, con el voucher.");
+                }
+            } else {
+                notificationService.create(user, "Reserva confirmada",
+                        "Tu reserva para \"" + experience.getTitle() + "\" fue confirmada.");
+            }
             if (experience.getPublisher() != null && !experience.getPublisher().getId().equals(user.getId())) {
                 notificationService.create(experience.getPublisher(), "Nueva reserva",
                         user.getFirstName() + " reservó \"" + experience.getTitle() + "\".");
@@ -265,6 +286,33 @@ public class OrderServiceImpl implements OrderService {
 
         order.setBookings(bookings);
         return toResponse(order);
+    }
+
+    // Valida los datos del regalo: para quién es (obligatorio), su email (opcional) y la dedicatoria (hasta 300 caracteres).
+    private GiftRequestDTO cleanGift(GiftRequestDTO gift) throws BadRequestException {
+        if (gift == null) {
+            return null;
+        }
+        String name = gift.getRecipientName() != null ? gift.getRecipientName().trim() : "";
+        String email = gift.getRecipientEmail() != null ? gift.getRecipientEmail().trim().toLowerCase() : "";
+        String message = gift.getMessage() != null ? gift.getMessage().trim() : "";
+        if (name.isEmpty() && email.isEmpty() && message.isEmpty()) {
+            return null; // no es un regalo
+        }
+        if (name.isEmpty() || name.length() > 100) {
+            throw new BadRequestException("Decinos para quién es el regalo (hasta 100 caracteres)");
+        }
+        if (!email.isEmpty() && (email.length() > 150 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
+            throw new BadRequestException("El email de quien recibe el regalo no es válido");
+        }
+        if (message.length() > 300) {
+            throw new BadRequestException("La dedicatoria puede tener hasta 300 caracteres");
+        }
+        return GiftRequestDTO.builder()
+                .recipientName(name)
+                .recipientEmail(email.isEmpty() ? null : email)
+                .message(message.isEmpty() ? null : message)
+                .build();
     }
 
     // Busca y valida el cupón del request (mismo criterio que GET /discount-coupons/validate),
@@ -410,6 +458,9 @@ public class OrderServiceImpl implements OrderService {
                 .refunded(refunded)
                 .commission(commissionOf(orZero(order.getTotal()).subtract(refunded)))
                 .bookings(bookingDtos)
+                .giftRecipientName(order.getGiftRecipientName())
+                .giftRecipientEmail(order.getGiftRecipientEmail())
+                .giftMessage(order.getGiftMessage())
                 .build();
     }
 

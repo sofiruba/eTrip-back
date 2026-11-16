@@ -96,13 +96,14 @@ public class ReviewServiceImpl implements ReviewService {
             throw new BadRequestException("Ya reseñaste esta experiencia");
         }
 
-        if (!bookingRepository.existsByOrder_User_IdAndExperienceSession_Experience_Id(
-                currentUser.getId(), experience.getId())) {
+        // Reservas propias y las que me regalaron
+        java.util.List<com.uade.tpo.demo.entity.Booking> myBookings = new java.util.ArrayList<>(
+                bookingRepository.findByOrder_User_IdAndExperienceSession_Experience_Id(currentUser.getId(), experience.getId()));
+        myBookings.addAll(bookingRepository.findByRecipient_IdAndExperienceSession_Experience_Id(currentUser.getId(), experience.getId()));
+        if (myBookings.isEmpty()) {
             throw new BadRequestException("Solo podés reseñar una experiencia que reservaste");
         }
-
-        boolean completedBooking = bookingRepository.findByOrder_User_IdAndExperienceSession_Experience_Id(
-                currentUser.getId(), experience.getId()).stream()
+        boolean completedBooking = myBookings.stream()
                 // Una reserva reembolsada (o de una sesión cancelada) no habilita a reseñar
                 .filter(reviewBooking -> !reviewBooking.isRefunded())
                 .map(reviewBooking -> reviewBooking.getExperienceSession())

@@ -7,7 +7,12 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -57,6 +62,24 @@ public class User implements UserDetails {
     private String firstName;
 
     private String lastName;
+
+    /** Perfil público (lo ven los demás en /anfitriones/{id}): presentación, ciudad, foto e intereses. */
+    @Column(length = 500)
+    private String bio;
+
+    @Column(length = 100)
+    private String city;
+
+    /** Foto de perfil (JPEG chico, el front la achica antes de mandarla). */
+    @Lob
+    @Column(columnDefinition = "MEDIUMBLOB")
+    private byte[] avatar;
+
+    /** Intereses elegidos (hasta 20). Las experiencias tienen tags con los mismos nombres: así se recomiendan. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "user_interests", joinColumns = @JoinColumn(name = "user_id"))
+    @Column(name = "interest", length = 40)
+    private List<String> interests;
 
     @OneToMany(mappedBy = "user")
     private List<Order> orders;

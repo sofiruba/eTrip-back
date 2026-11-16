@@ -26,6 +26,7 @@ import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.service.ExperienceSessionService;
+import com.uade.tpo.demo.service.WaitlistService;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,6 +36,7 @@ import lombok.RequiredArgsConstructor;
 public class ExperienceSessionsController {
 
     private final ExperienceSessionService experienceSessionService;
+    private final WaitlistService waitlistService;
 
     // Lista turnos con filtros opcionales combinables: experienceId, onlyAvailable (con cupo), dateFrom/dateTo.
     @GetMapping
@@ -68,6 +70,27 @@ public class ExperienceSessionsController {
     public ResponseEntity<List<ExperienceSessionResponseDTO>> getManagedSessions(
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(experienceSessionService.getManagedSessions(currentUser));
+    }
+
+    // Lista de espera: en qué fechas agotadas está anotado el usuario (ids).
+    @GetMapping("/waitlist/mine")
+    public ResponseEntity<List<Long>> getMyWaitlist(@AuthenticationPrincipal User currentUser) {
+        return ResponseEntity.ok(waitlistService.getMySessionIds(currentUser));
+    }
+
+    // "Avisame si se libera un lugar": se anota en una fecha agotada.
+    @PostMapping("/{sessionId}/waitlist")
+    public ResponseEntity<Void> joinWaitlist(@PathVariable Long sessionId, @AuthenticationPrincipal User currentUser)
+            throws ResourceNotFoundException, BadRequestException {
+        waitlistService.join(sessionId, currentUser);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Se baja de la lista de espera.
+    @DeleteMapping("/{sessionId}/waitlist")
+    public ResponseEntity<Void> leaveWaitlist(@PathVariable Long sessionId, @AuthenticationPrincipal User currentUser) {
+        waitlistService.leave(sessionId, currentUser);
+        return ResponseEntity.noContent().build();
     }
 
     // Un turno puntual por id.

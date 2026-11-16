@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 
 import javax.imageio.IIOImage;
@@ -30,7 +31,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
+import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
+import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
 import com.uade.tpo.demo.entity.ExperienceSession;
@@ -47,9 +50,16 @@ import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSpecifications;
+import com.uade.tpo.demo.repository.FavoriteRepository;
+import com.uade.tpo.demo.repository.WaitlistRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.ExperienceService;
+import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.WaitlistService;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 
 import lombok.RequiredArgsConstructor;
 
@@ -76,13 +86,18 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final ReviewRepository reviewRepository;
     private final BookingRepository bookingRepository;
     private final CartItemRepository cartItemRepository;
+    private final FavoriteRepository favoriteRepository;
+    private final WaitlistRepository waitlistRepository;
+    private final NotificationService notificationService;
+    private final WaitlistService waitlistService;
+    private final EntityManager entityManager;
 
     // Busca experiencias combinando filtros opcionales (ver ExperienceSpecifications).
     // Los listados mandan solo la portada: todas las fotos de todas las experiencias hacían pesadísimo el inicio.
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceResponseDTO> searchExperiences(ExperienceSearchDTO filter, Pageable pageable,
-            boolean includeInactive) throws ResourceNotFoundException, BadRequestException {
+            boolean includeInactive, boolean includeDeleted) throws ResourceNotFoundException, BadRequestException {
         if (filter.getCategoryId() != null) {
             validateCategoryExists(filter.getCategoryId());
         }
@@ -99,7 +114,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             throw new BadRequestException("La duración mínima no puede ser mayor a la máxima");
         }
 
-        return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive), pageable)
+        return experienceRepository.findAll(ExperienceSpecifications.withFilters(filter, includeInactive, includeDeleted), pageable)
                 .map(this::toListResponse);
     }
 
@@ -108,6 +123,11 @@ public class ExperienceServiceImpl implements ExperienceService {
     public ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser)
             throws ResourceNotFoundException {
         Experience experience = findExperience(experienceId);
+        // Una eliminada solo la ve el admin (historial); una pausada, su anfitrión y el admin
+        boolean isAdmin = currentUser != null && currentUser.getRole() == Role.ADMIN;
+        if (experience.getDeletedAt() != null && !isAdmin) {
+            throw new ResourceNotFoundException("Esta experiencia ya no existe");
+        }
         if (!experience.isActive() && !canManage(experience, currentUser)) {
             throw new ResourceNotFoundException("Esta experiencia no está disponible");
         }
@@ -132,7 +152,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .orElseThrow(() -> new ResourceNotFoundException("La categoría elegida no existe"));
 
         String title = request.getTitle().trim();
-        if (experienceRepository.existsByPublisherIdAndTitleIgnoreCase(publisherId, title)) {
+        if (experienceRepository.existsByPublisherIdAndTitleIgnoreCaseAndDeletedAtIsNull(publisherId, title)) {
             throw new BadRequestException("Ya publicaste una experiencia con ese título");
         }
 
@@ -142,6 +162,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .price(request.getPrice())
                 .location(trimToNull(request.getLocation()))
                 .adultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()))
+                .tags(cleanTags(request.getTags()))
                 .category(category)
                 .publisher(publisher)
                 .build();
@@ -160,6 +181,7 @@ public class ExperienceServiceImpl implements ExperienceService {
             throws ResourceNotFoundException, BadRequestException, ForbiddenException, IOException {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
+        assertNotDeleted(experience);
         validateData(request);
 
         if (!request.getCategoryId().equals(experience.getCategory().getId())) {
@@ -171,7 +193,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         String title = request.getTitle().trim();
         Long publisherId = experience.getPublisher() != null ? experience.getPublisher().getId() : null;
         if (publisherId != null
-                && experienceRepository.existsByPublisherIdAndTitleIgnoreCaseAndIdNot(publisherId, title, experienceId)) {
+                && experienceRepository.existsByPublisherIdAndTitleIgnoreCaseAndIdNotAndDeletedAtIsNull(publisherId, title, experienceId)) {
             throw new BadRequestException("Ya publicaste una experiencia con ese título");
         }
         experience.setTitle(title);
@@ -179,7 +201,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         experience.setPrice(request.getPrice());
         experience.setLocation(trimToNull(request.getLocation()));
         experience.setAdultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()));
-
+        experience.setTags(cleanTags(request.getTags()));
         List<MultipartFile> validImages = nonEmptyImages(images);
         if (!validImages.isEmpty()) {
             if (experience.getImages() != null) {
@@ -201,6 +223,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
 
+        assertNotDeleted(experience);
         if (discountPercentage == null || discountPercentage.signum() == 0) {
             experience.setDiscountPercentage(null);
         } else {
@@ -214,44 +237,94 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
-    // Borra una experiencia en cascada: sus reseñas, sus fechas y los ítems de carrito. Solo el dueño o un ADMIN.
-    // Si alguna vez se vendió (tiene reservas, aunque sean de fechas pasadas o reembolsadas) no se borra: esas reservas
-    // son los vouchers y el historial de compra de otras personas, y las órdenes y las estadísticas dependen de ellas.
-    // En ese caso se pausa (PATCH /experiences/{id}/status?active=false).
+    // Elimina una experiencia. Regla de PLAN: el anfitrión puede darla de baja cuando quiera, pero nadie se queda sin su
+    // plata ni sin aviso: cada fecha futura se cancela, sus reservas vigentes se reembolsan y los compradores reciben una
+    // notificación (igual que al cancelar una fecha suelta). Después:
+    //  - si nunca se vendió, se borra de la base (reseñas, fechas, ítems de carrito, favoritos y listas de espera);
+    //  - si alguna vez tuvo reservas, queda guardada (pausada y con deletedAt): los compradores conservan sus vouchers,
+    //    el historial de ventas no cambia y el admin la sigue viendo como "Eliminada". Nadie más la ve ni la puede comprar.
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public void deleteExperience(Long experienceId, User currentUser)
+    public ExperienceDeleteResultDTO deleteExperience(Long experienceId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
-
+        assertNotDeleted(experience);
         List<ExperienceSession> sessions = experience.getSessions() != null ? experience.getSessions() : List.of();
-
-        boolean hasBookings = sessions.stream()
-                .anyMatch(session -> session.getBookings() != null && !session.getBookings().isEmpty());
-        if (hasBookings) {
-            throw new BadRequestException("Esta experiencia ya tuvo reservas y los compradores conservan sus vouchers, "
-                    + "así que no se puede eliminar. Podés desactivarla para que no se vea más en el catálogo.");
+        LocalDateTime now = LocalDateTime.now();
+        int cancelledSessions = 0;
+        int refundedBookings = 0;
+        boolean everSold = false;
+        for (ExperienceSession session : sessions) {
+            // Bloquea la fecha mientras se reembolsa (mismo orden que cancelar una fecha o reembolsar una reserva)
+            entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
+            List<Booking> bookings = bookingRepository.findByExperienceSession_Id(session.getId());
+            if (!bookings.isEmpty()) {
+                everSold = true;
+            }
+            boolean upcoming = session.isActive() && session.getStartsAt() != null && session.getStartsAt().isAfter(now);
+            if (!upcoming) {
+                continue;
+            }
+            for (Booking booking : bookings) {
+                if (booking.isRefunded()) {
+                    continue;
+                }
+                booking.setRefunded(true);
+                booking.setRefundedAt(now);
+                bookingRepository.save(booking);
+                refundedBookings++;
+                User buyer = booking.getOrder() != null ? booking.getOrder().getUser() : null;
+                notificationService.create(buyer, "Experiencia cancelada",
+                        "El anfitrión dio de baja \"" + experience.getTitle() + "\". Te reembolsamos tu reserva del "
+                                + session.getStartsAt().toLocalDate() + " (voucher " + booking.getVoucherCode() + ").");
+                if (booking.getRecipient() != null && (buyer == null || !booking.getRecipient().getId().equals(buyer.getId()))) {
+                    notificationService.create(booking.getRecipient(), "Experiencia cancelada",
+                            "\"" + experience.getTitle() + "\" fue dada de baja por su anfitrión: la reserva que te regalaron quedó sin efecto.");
+                }
+            }
+            waitlistService.notifySessionCancelled(session);
+            session.setActive(false);
+            session.setAvailableSeats(session.getCapacity());
+            experienceSessionRepository.save(session);
+            cancelledSessions++;
         }
-
-        // Cascada: reseñas → por cada fecha, sus ítems de carrito → las fechas → la experiencia.
-        // Las fotos se borran solas (cascade = ALL en Experience.images).
-        if (experience.getReviews() != null) {
-            reviewRepository.deleteAll(experience.getReviews());
-        }
+        // Nadie puede seguir comprándola ni guardándola
         for (ExperienceSession session : sessions) {
             cartItemRepository.deleteByExperienceSessionId(session.getId());
         }
-        experienceSessionRepository.deleteAll(sessions);
-        experienceRepository.delete(experience);
+        favoriteRepository.deleteByExperienceId(experienceId);
+
+        if (!everSold) {
+            // Cascada: reseñas → listas de espera y fechas → la experiencia (las fotos se borran solas, cascade = ALL)
+            if (experience.getReviews() != null) {
+                reviewRepository.deleteAll(experience.getReviews());
+            }
+            for (ExperienceSession session : sessions) {
+                waitlistRepository.deleteBySessionId(session.getId());
+            }
+            experienceSessionRepository.deleteAll(sessions);
+            experienceRepository.delete(experience);
+        } else {
+            experience.setActive(false);
+            experience.setDeletedAt(now);
+            experienceRepository.save(experience);
+        }
+        return ExperienceDeleteResultDTO.builder()
+                .experienceId(experienceId)
+                .removed(!everSold)
+                .cancelledSessions(cancelledSessions)
+                .refundedBookings(refundedBookings)
+                .build();
     }
 
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceResponseDTO updateStatus(Long experienceId, boolean active, User currentUser)
-            throws ResourceNotFoundException, ForbiddenException {
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
         Experience experience = findExperience(experienceId);
         assertCanManage(experience, currentUser);
+        assertNotDeleted(experience);
         experience.setActive(active);
         return toResponse(experienceRepository.save(experience));
     }
@@ -308,6 +381,34 @@ public class ExperienceServiceImpl implements ExperienceService {
                 || request.getLocation().split(",").length < 2
                 || request.getLocation().matches(".*\\d.*")) {
             throw new BadRequestException("Indicá un barrio y una ciudad válidos, sin dirección exacta.");
+        }
+    }
+
+    // Etiquetas sin repetir ni espacios de más, hasta 8 de hasta 40 caracteres
+    private List<String> cleanTags(List<String> raw) throws BadRequestException {
+        if (raw == null) {
+            return new ArrayList<>();
+        }
+        LinkedHashSet<String> clean = new LinkedHashSet<>();
+        for (String tag : raw) {
+            if (tag == null || tag.isBlank()) {
+                continue;
+            }
+            String trimmed = tag.trim();
+            if (trimmed.length() > 40) {
+                throw new BadRequestException("Cada etiqueta puede tener hasta 40 caracteres");
+            }
+            clean.add(trimmed);
+        }
+        if (clean.size() > 8) {
+            throw new BadRequestException("Podés elegir hasta 8 etiquetas");
+        }
+        return new ArrayList<>(clean);
+    }
+
+    private void assertNotDeleted(Experience experience) throws BadRequestException {
+        if (experience.getDeletedAt() != null) {
+            throw new BadRequestException("Esta experiencia fue eliminada y ya no se puede modificar");
         }
     }
 
@@ -487,7 +588,8 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .discountPercentage(experience.getDiscountPercentage())
                 .finalPrice(experience.getEffectivePrice())
                 .active(experience.isActive())
-                .status(!experience.isActive() ? "INACTIVE" : hasUpcomingSessions(experience) ? "ACTIVE" : "NO_DATES")
+                .status(experience.getDeletedAt() != null ? "DELETED"
+                        : !experience.isActive() ? "INACTIVE" : hasUpcomingSessions(experience) ? "ACTIVE" : "NO_DATES")
                 .adultsOnly(experience.isAdultsOnly())
                 .location(experience.getLocation())
                 .imagesBase64(imagesBase64)
@@ -497,6 +599,8 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .publisherName(publisherName(experience.getPublisher()))
                 .averageRating(averageRating)
                 .reviewCount(reviewCount)
+                .tags(experience.getTags() != null ? new ArrayList<>(experience.getTags()) : List.of())
+                .favoriteCount(favoriteRepository.countByExperienceId(experience.getId()))
                 .build();
     }
 

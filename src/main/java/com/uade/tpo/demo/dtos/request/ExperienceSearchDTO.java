@@ -43,4 +43,6 @@ public class ExperienceSearchDTO {
     private List<String> timeSlots;
     /** true = el grupo tiene niños o bebés: no se muestran las experiencias solo para mayores de 18. */
     private Boolean withKids;
+    /** Etiquetas: la experiencia tiene que tener al menos una de ellas ("Para vos": los intereses del usuario). */
+    private List<String> tags;
 }

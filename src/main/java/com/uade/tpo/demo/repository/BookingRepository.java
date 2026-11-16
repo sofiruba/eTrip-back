@@ -10,6 +10,9 @@ import com.uade.tpo.demo.entity.Booking;
 @Repository
 public interface BookingRepository extends JpaRepository<Booking, Long> {
     Page<Booking> findByOrder_User_Id(Long userId, Pageable pageable);
+    // Mis reservas: las que compré y las que me regalaron
+    Page<Booking> findByOrder_User_IdOrRecipient_Id(Long userId, Long recipientId, Pageable pageable);
+    java.util.List<Booking> findByRecipient_IdAndExperienceSession_Experience_Id(Long recipientId, Long experienceId);
 
     Page<Booking> findByExperienceSession_Experience_Publisher_Id(Long publisherId, Pageable pageable);
 

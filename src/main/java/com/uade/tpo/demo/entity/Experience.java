@@ -2,11 +2,14 @@ package com.uade.tpo.demo.entity;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 
 import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
@@ -64,6 +67,19 @@ public class Experience {
     @Column(nullable = false)
     @Builder.Default
     private boolean adultsOnly = false;
+
+    /**
+     * Cuándo la eliminó su anfitrión. Una experiencia que alguna vez se vendió no se borra de la base (los compradores
+     * conservan sus vouchers y las estadísticas dependen de sus reservas): queda con esta fecha, pausada y oculta.
+     */
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    /** Etiquetas (hasta 8) con los mismos nombres que los intereses de los usuarios: "Vinos", "Caminata"… */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "experience_tags", joinColumns = @JoinColumn(name = "experience_id"))
+    @Column(name = "tag", length = 40)
+    private List<String> tags;
 
     @OneToMany(mappedBy = "experience", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")

@@ -19,4 +19,6 @@ public class OrderRequestDTO {
     private String cardNumber;
     /** Opcional: el total que vio el comprador. Si no coincide con el que calcula el back, la compra se rechaza. */
     private BigDecimal expectedTotal;
+    /** Opcional: la compra es un regalo para otra persona. */
+    private GiftRequestDTO gift;
 }

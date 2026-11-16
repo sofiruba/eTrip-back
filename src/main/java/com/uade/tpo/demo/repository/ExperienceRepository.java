@@ -9,9 +9,8 @@ import com.uade.tpo.demo.entity.Experience;
 @Repository
 public interface ExperienceRepository
         extends JpaRepository<Experience, Long>, JpaSpecificationExecutor<Experience> {
-    long countByPublisherId(Long publisherId);
-
-    boolean existsByPublisherIdAndTitleIgnoreCase(Long publisherId, String title);
-
-    boolean existsByPublisherIdAndTitleIgnoreCaseAndIdNot(Long publisherId, String title, Long id);
+    long countByPublisherIdAndDeletedAtIsNull(Long publisherId);
+    // Una experiencia eliminada deja libre su título para volver a usarlo
+    boolean existsByPublisherIdAndTitleIgnoreCaseAndDeletedAtIsNull(Long publisherId, String title);
+    boolean existsByPublisherIdAndTitleIgnoreCaseAndIdNotAndDeletedAtIsNull(Long publisherId, String title, Long id);
 }

@@ -24,6 +24,7 @@ import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.service.BookingService;
 import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.WaitlistService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -40,15 +41,17 @@ public class BookingServiceImpl implements BookingService {
     private final ExperienceRepository experienceRepository;
     private final ExperienceSessionRepository experienceSessionRepository;
     private final NotificationService notificationService;
+    private final WaitlistService waitlistService;
     private final EntityManager entityManager;
 
     // Vouchers del usuario logueado; ADMIN ve los de todos.
     @Override
     @Transactional(readOnly = true)
     public Page<BookingResponseDTO> getBookings(User user, Pageable pageable) {
+        // Las que compré y las que me regalaron
         Page<Booking> bookings = isAdmin(user)
                 ? bookingRepository.findAll(pageable)
-                : bookingRepository.findByOrder_User_Id(user.getId(), pageable);
+                : bookingRepository.findByOrder_User_IdOrRecipient_Id(user.getId(), user.getId(), pageable);
         return bookings.map(this::toResponse);
     }
 
@@ -99,8 +102,10 @@ public class BookingServiceImpl implements BookingService {
                 && session.getExperience().getPublisher() != null
                 && session.getExperience().getPublisher().getId().equals(user.getId());
 
-        // Solo el comprador, el vendedor o un ADMIN pueden ver la reserva.
-        if (!isBuyer && !isSeller && !isAdmin(user)) {
+        // Si fue un regalo, quien lo recibió también la ve
+        boolean isRecipient = booking.getRecipient() != null && booking.getRecipient().getId().equals(user.getId());
+        // Solo el comprador, el destinatario, el vendedor o un ADMIN pueden ver la reserva.
+        if (!isBuyer && !isRecipient && !isSeller && !isAdmin(user)) {
             throw new ForbiddenException("No tenés acceso a esta reserva");
         }
 
@@ -155,9 +160,17 @@ public class BookingServiceImpl implements BookingService {
         booking.setRefunded(true);
         booking.setRefundedAt(LocalDateTime.now());
         Booking saved = bookingRepository.save(booking);
+        String title = session.getExperience() != null ? session.getExperience().getTitle() : "la experiencia";
         notificationService.create(order != null ? order.getUser() : null, "Reserva reembolsada",
-                "Tu reserva para \"" + (session.getExperience() != null ? session.getExperience().getTitle() : "la experiencia")
-                        + "\" fue cancelada y reembolsada.");
+                "Tu reserva para \"" + title + "\" fue cancelada y reembolsada.");
+        // Si era un regalo, quien lo recibió también se entera (la plata vuelve a quien lo compró)
+        if (booking.getRecipient() != null && (order == null || order.getUser() == null
+                || !booking.getRecipient().getId().equals(order.getUser().getId()))) {
+            notificationService.create(booking.getRecipient(), "Regalo cancelado",
+                    "La reserva de \"" + title + "\" que te regalaron fue cancelada.");
+        }
+        // Se liberaron lugares: les avisamos a los que estaban en lista de espera
+        waitlistService.notifySeatsAvailable(session);
         return toResponse(saved);
     }
 
@@ -191,6 +204,18 @@ public class BookingServiceImpl implements BookingService {
                 .build(), booking, experience);
     }
 
+    // Completa los datos del regalo (si la compra fue un regalo) y quién lo recibió.
+    static BookingResponseDTO withGift(BookingResponseDTO dto, Booking booking) {
+        Order order = booking.getOrder();
+        if (order != null && order.getGiftRecipientName() != null) {
+            dto.setGiftRecipientName(order.getGiftRecipientName());
+            dto.setGiftMessage(order.getGiftMessage());
+            dto.setGiftFromName(dto.getBuyerName());
+        }
+        dto.setRecipientId(booking.getRecipient() != null ? booking.getRecipient().getId() : null);
+        return dto;
+    }
+
     // El precio que se pagó (guardado al comprar). Las reservas anteriores a ese campo usan el precio actual.
     static BigDecimal paidUnitPrice(Booking booking, Experience experience) {
         if (booking.getUnitPrice() != null) {
@@ -217,7 +242,7 @@ public class BookingServiceImpl implements BookingService {
         dto.setPaidAmount(paid);
         dto.setCommission(commission);
         dto.setHostEarnings(paid.subtract(commission));
-        return dto;
+        return withGift(dto, booking);
     }
 
     private String fullName(User user) {

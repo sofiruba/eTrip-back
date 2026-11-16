@@ -1,5 +1,7 @@
 package com.uade.tpo.demo.dtos.request;
 
+import java.util.List;
+
 import java.math.BigDecimal;
 
 import lombok.AllArgsConstructor;
@@ -19,4 +21,6 @@ public class ExperienceRequestDTO {
     private Long categoryId;
     /** Solo para mayores de 18 (si no viene, false). */
     private Boolean adultsOnly;
+    /** Etiquetas (hasta 8), con los nombres de los intereses: "Vinos", "Caminata"... */
+    private List<String> tags;
 }

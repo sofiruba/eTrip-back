@@ -43,7 +43,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/error/**").permitAll()
                                 .requestMatchers("/users/me").hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                 // GET que piden sesión aunque estén bajo prefijos públicos (tienen que ir antes del permitAll)
-                                .requestMatchers(HttpMethod.GET, "/experiences/mine", "/experience-sessions/manage")
+                                .requestMatchers(HttpMethod.GET, "/experiences/mine", "/experience-sessions/manage",
+                                                "/experience-sessions/waitlist/mine")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                 .requestMatchers(HttpMethod.GET, "/experiences/**", "/experience-categories/**",
                                                 "/experience-sessions/**", "/reviews/experience/**", "/users/*").permitAll()
@@ -63,6 +64,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/bookings/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/notifications/**")
+                                                .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
+                                                .requestMatchers("/favorites/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 .requestMatchers("/reviews/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())

@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uade.tpo.demo.dtos.request.ExperienceDiscountRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
+import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
@@ -65,6 +66,7 @@ public class ExperiencesController {
             @RequestParam(required = false) Integer durationMax,
             @RequestParam(required = false) List<String> timeSlots,
             @RequestParam(required = false) Boolean withKids,
+            @RequestParam(required = false) List<String> tags,
             @RequestParam(defaultValue = "false") boolean includeInactive,
             @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException, BadRequestException {
@@ -84,15 +86,17 @@ public class ExperiencesController {
                 .durationMax(durationMax)
                 .timeSlots(timeSlots)
                 .withKids(withKids)
+                .tags(tags)
                 .build();
-
         boolean canIncludeInactive = includeInactive && currentUser != null
                 && (currentUser.getRole() == com.uade.tpo.demo.entity.Role.ADMIN
                         || (currentUser.getRole() == com.uade.tpo.demo.entity.Role.CLIENTE
                                 && publisherId != null
                                 && currentUser.getId().equals(publisherId)));
+        // Las eliminadas solo las ve el admin, en su panel (includeInactive): para todos los demás no existen
+        boolean includeDeleted = canIncludeInactive && currentUser.getRole() == com.uade.tpo.demo.entity.Role.ADMIN;
         return ResponseEntity.ok(
-                experienceService.searchExperiences(filter, pageRequest(page, size), canIncludeInactive));
+                experienceService.searchExperiences(filter, pageRequest(page, size), canIncludeInactive, includeDeleted));
     }
 
     // Mis publicaciones (modo vendedor).
@@ -105,7 +109,7 @@ public class ExperiencesController {
                 .publisherId(currentUser.getId())
                 .build();
 
-        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size), true));
+        return ResponseEntity.ok(experienceService.searchExperiences(filter, pageRequest(page, size), true, false));
     }
 
     // Una experiencia puntual por id.
@@ -162,14 +166,14 @@ public class ExperiencesController {
         return ResponseEntity.ok(experienceService.updateDiscount(experienceId, discountPercentage, currentUser));
     }
 
-    // Borra una experiencia; falla si tiene sesiones asociadas. Solo el dueño o un ADMIN.
+    // Elimina una experiencia: cancela sus fechas futuras, reembolsa y avisa a los compradores. Solo el dueño o un ADMIN.
+    // Devuelve cuántas fechas se cancelaron y cuántas reservas se reembolsaron.
     @DeleteMapping("/{experienceId}")
-    public ResponseEntity<Void> deleteExperience(
+    public ResponseEntity<ExperienceDeleteResultDTO> deleteExperience(
             @PathVariable Long experienceId,
             @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
-        experienceService.deleteExperience(experienceId, currentUser);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(experienceService.deleteExperience(experienceId, currentUser));
     }
 
     @PatchMapping("/{experienceId}/status")
@@ -177,7 +181,7 @@ public class ExperiencesController {
             @PathVariable Long experienceId,
             @RequestParam boolean active,
             @AuthenticationPrincipal User currentUser)
-            throws ResourceNotFoundException, ForbiddenException {
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
         return ResponseEntity.ok(experienceService.updateStatus(experienceId, active, currentUser));
     }
 

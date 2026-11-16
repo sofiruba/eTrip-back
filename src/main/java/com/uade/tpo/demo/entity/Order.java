@@ -50,6 +50,16 @@ public class Order {
     @Column
     private BigDecimal total;
 
+    /** Compra como regalo: para quién es, su email (para avisarle si tiene cuenta) y una dedicatoria. */
+    @Column(name = "gift_recipient_name", length = 100)
+    private String giftRecipientName;
+
+    @Column(name = "gift_recipient_email", length = 150)
+    private String giftRecipientEmail;
+
+    @Column(name = "gift_message", length = 300)
+    private String giftMessage;
+
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
     private User user;

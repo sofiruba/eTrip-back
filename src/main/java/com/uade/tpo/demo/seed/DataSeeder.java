@@ -35,20 +35,24 @@ import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
 import com.uade.tpo.demo.entity.ExperienceImage;
 import com.uade.tpo.demo.entity.ExperienceSession;
+import com.uade.tpo.demo.entity.Favorite;
 import com.uade.tpo.demo.entity.Notification;
 import com.uade.tpo.demo.entity.Order;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
+import com.uade.tpo.demo.entity.WaitlistEntry;
 import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
+import com.uade.tpo.demo.repository.FavoriteRepository;
 import com.uade.tpo.demo.repository.NotificationRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.repository.WaitlistRepository;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -86,12 +90,15 @@ public class DataSeeder implements CommandLineRunner {
     private final BookingRepository bookingRepository;
     private final ReviewRepository reviewRepository;
     private final NotificationRepository notificationRepository;
+    private final FavoriteRepository favoriteRepository;
+    private final WaitlistRepository waitlistRepository;
 
     public DataSeeder(JdbcTemplate jdbcTemplate, PlatformTransactionManager transactionManager, ObjectMapper objectMapper,
             PasswordEncoder passwordEncoder, UserRepository userRepository, ExperienceCategoryRepository categoryRepository,
             ExperienceRepository experienceRepository, ExperienceSessionRepository sessionRepository,
             DiscountCouponRepository couponRepository, OrderRepository orderRepository, BookingRepository bookingRepository,
-            ReviewRepository reviewRepository, NotificationRepository notificationRepository) {
+            ReviewRepository reviewRepository, NotificationRepository notificationRepository,
+            FavoriteRepository favoriteRepository, WaitlistRepository waitlistRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.transaction = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
@@ -105,6 +112,8 @@ public class DataSeeder implements CommandLineRunner {
         this.bookingRepository = bookingRepository;
         this.reviewRepository = reviewRepository;
         this.notificationRepository = notificationRepository;
+        this.favoriteRepository = favoriteRepository;
+        this.waitlistRepository = waitlistRepository;
     }
 
     @Override
@@ -179,7 +188,10 @@ public class DataSeeder implements CommandLineRunner {
         int bookingCount = 0;
         int reviewCount = 0;
         int refundCount = 0;
+        int favoriteCount = 0;
+        int waitlistCount = 0;
         boolean soldOutDone = false;
+        boolean giftDone = false;
         // Primero los anfitriones; después sus experiencias intercaladas (una de cada anfitrión por vuelta),
         // así el catálogo no arranca con todas las de una misma ciudad
         List<User> hosts = new ArrayList<>();
@@ -261,12 +273,46 @@ public class DataSeeder implements CommandLineRunner {
                         User buyer = buyers.get(1 + random.nextInt(buyers.size() - 1));
                         Booking booking = buy(buyer, session, quantity, now.minusDays(1 + random.nextInt(10)), pickCoupon(usableCoupons));
                         bookingCount++;
-                        // Algunas reservas se reembolsaron: los lugares vuelven a la fecha
-                        if (random.nextInt(25) == 0) {
+                        // Algunas reservas se reembolsaron: los lugares vuelven a la fecha (salvo en la agotada)
+                        if (target != capacity && random.nextInt(25) == 0) {
                             refund(booking, now.minusDays(random.nextInt(2)));
                             refundCount++;
                         }
                     }
+                    // En la fecha agotada hay gente en lista de espera ("Avisame si se libera un lugar"), la demo incluida
+                    if (target == capacity && session.getAvailableSeats() == 0) {
+                        for (User waiting : List.of(demoBuyer, buyers.get(3), buyers.get(7))) {
+                            waitlistRepository.save(WaitlistEntry.builder().user(waiting).session(session)
+                                    .createdAt(now.minusDays(1 + random.nextInt(3))).build());
+                            waitlistCount++;
+                        }
+                    }
+                }
+
+                // Un regalo: Tomás le regala a la cuenta de demo una experiencia próxima (1 lugar, a su nombre)
+                if (!giftDone && experienceCount == 4 && upcoming.get(2).getAvailableSeats() >= 1) {
+                    User giver = buyers.get(1);
+                    Booking gift = buy(giver, upcoming.get(2), 1, now.minusDays(1), null);
+                    bookingCount++;
+                    giftDone = true;
+                    Order order = gift.getOrder();
+                    order.setGiftRecipientName(demoBuyer.getFirstName() + " " + demoBuyer.getLastName());
+                    order.setGiftRecipientEmail(demoBuyer.getEmail());
+                    order.setGiftMessage("¡Feliz cumple! Para que lo disfrutes como te gusta.");
+                    orderRepository.save(order);
+                    gift.setRecipient(demoBuyer);
+                    bookingRepository.save(gift);
+                    notify(giver, "Regalo confirmado", "Le regalaste \"" + experience.getTitle() + "\" a "
+                            + order.getGiftRecipientName() + ". Voucher " + gift.getVoucherCode() + ".", now.minusDays(1));
+                    notify(demoBuyer, "¡Te regalaron una experiencia!", giver.getFirstName() + " te regaló \""
+                            + experience.getTitle() + "\". Ya está en Mis reservas con tu voucher.", now.minusDays(1));
+                }
+
+                // Guardados de la cuenta de demo (1 de cada 7 experiencias)
+                if (experienceCount % 7 == 3) {
+                    favoriteRepository.save(Favorite.builder().user(demoBuyer).experience(experience)
+                            .createdAt(now.minusDays(random.nextInt(12))).build());
+                    favoriteCount++;
                 }
 
                 // La cuenta de demo tiene reservas próximas en algunas experiencias (1 de cada 6)
@@ -280,8 +326,8 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         notify(demoBuyer, "Bienvenida a PLAN", "Usá el cupón BIENVENIDA15 en tu próxima compra.", now.minusDays(20));
-        log.info("=== DataSeeder listo: {} categorías, {} usuarios, {} experiencias, {} fechas, {} reservas ({} reembolsadas), {} reseñas, {} cupones ===",
-                categories.size(), userRepository.count(), experienceCount, sessionCount, bookingCount, refundCount, reviewCount, coupons.size());
+        log.info("=== DataSeeder listo: {} categorías, {} usuarios, {} experiencias, {} fechas, {} reservas ({} reembolsadas, 1 regalo), {} reseñas, {} cupones, {} guardados, {} en lista de espera ===",
+                categories.size(), userRepository.count(), experienceCount, sessionCount, bookingCount, refundCount, reviewCount, coupons.size(), favoriteCount, waitlistCount);
         log.info("Admin: {} / {} · Compradores y anfitriones: <email del JSON> / {} · Demo: {}",
                 data.get("admin").get("email").asText(), data.get("admin").get("password").asText(), PASSWORD, demoBuyer.getEmail());
     }
@@ -295,7 +341,19 @@ public class DataSeeder implements CommandLineRunner {
                 .password(passwordEncoder.encode(password))
                 .role(role)
                 .active(true)
+                .city(node.path("city").asText(null))
+                .bio(node.path("bio").asText(null))
+                .interests(texts(node.get("interests")))
                 .build());
+    }
+
+    /** Lista de strings de un arreglo del JSON (vacía si no está). */
+    private List<String> texts(JsonNode array) {
+        List<String> values = new ArrayList<>();
+        if (array != null) {
+            array.forEach(value -> values.add(value.asText()));
+        }
+        return values;
     }
 
     private Experience createExperience(JsonNode node, User host, ExperienceCategory category) {
@@ -309,6 +367,7 @@ public class DataSeeder implements CommandLineRunner {
                 .category(category)
                 .publisher(host)
                 .active(true)
+                .tags(texts(node.get("tags")))
                 .build();
         // Fotos: <slug>-1.jpg, <slug>-2.jpg… (las que haya)
         List<ExperienceImage> images = new ArrayList<>();

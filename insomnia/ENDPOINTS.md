@@ -53,7 +53,8 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 | `POST/PUT/DELETE /experience-categories/**` | **solo ADMIN** |
 | `/users/**` (resto) | CLIENTE o ADMIN (algunas acciones dentro, como `GET /users` o `PATCH .../role`, exigen ADMIN y devuelven 403 si no) |
 | `/experiences`, `/experience-sessions` (escrituras) | CLIENTE o ADMIN; además solo el dueño de la experiencia o un ADMIN (403 si no) |
-| `/reviews`, `/carts`, `/orders`, `/bookings`, `/notifications` | CLIENTE o ADMIN |
+| `/reviews`, `/carts`, `/orders`, `/bookings`, `/notifications`, `/favorites` | CLIENTE o ADMIN |
+| `/experience-sessions/{id}/waitlist`, `/experience-sessions/waitlist/mine` | CLIENTE o ADMIN (lista de espera) |
 | `GET /discount-coupons/validate` | CLIENTE o ADMIN |
 | Resto de `/discount-coupons/**` (listar, ver, crear, editar, borrar) | **solo ADMIN** |
 
@@ -77,7 +78,7 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 - Fotos de experiencias: hasta 5, de hasta 5 MB, JPG/PNG/WEBP de verdad (si no se decodifica → 400) y como mucho 40 megapíxeles.
 - Los **listados** de experiencias (`GET /experiences`, `/mine`, búsquedas) mandan **solo la portada** en `imagesBase64`; `GET /experiences/{id}` manda todas.
 - Descuento de experiencia: 0–90% (igual que el front). Título ≤150, descripción ≤2000, ubicación ≤200, reseña ≤1000, categoría ≤100 (descripción ≤255).
-- `DELETE /experiences/{id}` falla (400) si la experiencia tuvo reservas: se desactiva en vez de borrarse. `DELETE` definitivo de una fecha: solo si ya terminó o está cancelada **y** nunca tuvo reservas.
+- `DELETE /experiences/{id}` (dar de baja) **reembolsa y avisa a todos** los que tenían reservas vigentes en fechas futuras, cancela esas fechas y avisa a la lista de espera. Si la experiencia nunca se vendió se borra del todo; si se vendió, queda en estado `DELETED` (solo la ve el ADMIN) para que las reservas viejas, reseñas y estadísticas no se pierdan. `DELETE` definitivo de una fecha: solo si ya terminó o está cancelada **y** nunca tuvo reservas.
 - `PUT /experience-sessions/{id}`: con reservas vigentes no se puede cambiar el horario (sí el cupo).
 - `Booking.unitPrice` guarda el precio pagado; voucher, reembolsos y stats lo usan (las reservas viejas usan el precio actual).
 - `POST /orders` acepta `expectedTotal` (opcional): si no coincide con el total calculado, 400 sin cobrar.
@@ -95,10 +96,12 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
   "firstname": "Nacho",
   "lastname": "Cortes",
   "email": "nacho@etrip.com",
-  "password": "1234"
+  "password": "1234",
+  "interests": ["Gastronomía", "Vinos"]
 }
 ```
-`username` y `email` son únicos. Si falta cualquier campo → `400`. Si el username o el email ya existen → `400` con
+`interests` es opcional (máx. 20, los mismos nombres que los `tags` de las experiencias): el Home usa los intereses
+para la sección "Para vos". `username` y `email` son únicos. Si falta cualquier campo → `400`. Si el username o el email ya existen → `400` con
 `"Ese nombre de usuario ya está en uso"` / `"Ya hay una cuenta con ese email"`.
 
 ### POST `/api/v1/auth/authenticate`
@@ -144,16 +147,27 @@ o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_c
 
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
-| GET | `/users/me` | propio | Mi perfil: `username`, nombre, `role`, `email`, `publishedExperiences`, `bookingsCount`, `reviewsCount`. |
-| PUT | `/users/me` | propio | Editar `firstName`/`lastName` (al menos uno). |
+| GET | `/users/me` | propio | Mi perfil: `username`, nombre, `role`, `email`, `bio`, `city`, `avatarBase64`, `interests`, `publishedExperiences`, `bookingsCount`, `reviewsCount`. |
+| PUT | `/users/me` | propio | Editar nombre, apellido, `bio`, `city`, foto (`avatarBase64`) e `interests`. Todo opcional. |
 | GET | `/users/{userId}` | público | Perfil público de otro usuario (sin email/contadores privados salvo que seas vos o ADMIN). Sin sesión también responde (perfil reducido). |
 | GET | `/users?page=&size=` | **ADMIN** | Lista de usuarios. |
 | PATCH | `/users/{userId}/role?role=CLIENTE\|ADMIN` | **ADMIN** | Asigna permisos. No podés cambiarte tu propio rol (403). |
 
 ### PUT `/users/me`
 ```json
-{ "firstName": "Nacho", "lastName": "Cortes" }
+{
+  "firstName": "Nacho",
+  "lastName": "Cortes",
+  "bio": "Me gusta descubrir mi ciudad como si fuera turista.",
+  "city": "Buenos Aires",
+  "avatarBase64": "data:image/jpeg;base64,/9j/4AAQ...",
+  "interests": ["Gastronomía", "Vinos", "Música en vivo"]
+}
 ```
+Un campo que no se manda (o `null`) no se toca; un string vacío (`""`) lo borra (la foto también). `bio` hasta 500
+caracteres, `city` 100, la foto hasta 400 KB (data URL o base64 pelado), `interests` hasta 20 de 40 caracteres.
+El perfil público (`GET /users/{id}`) muestra `bio`, `city`, `avatarBase64` e `interests` de cualquier usuario:
+es la ficha del anfitrión en la página de la experiencia.
 
 ---
 
@@ -187,7 +201,8 @@ o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_c
 | POST | `/experiences` | **multipart/form-data** |
 | PUT | `/experiences/{experienceId}` | **multipart/form-data** (`images` opcional) |
 | PATCH | `/experiences/{experienceId}/discount` | JSON, ver abajo |
-| DELETE | `/experiences/{experienceId}` | — |
+| PATCH | `/experiences/{experienceId}/status?active=true\|false` | — (pausar / volver a publicar; solo el dueño o ADMIN) |
+| DELETE | `/experiences/{experienceId}` | — (dar de baja: reembolsa y avisa a todos, ver abajo) |
 
 ### Filtros de `GET /experiences` (todos opcionales, se combinan con AND)
 
@@ -205,6 +220,7 @@ o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_c
 | `durationMin` / `durationMax` | Duración de la fecha, en minutos. `durationMin > durationMax` → `400`. |
 | `timeSlots` | Franja de inicio, separadas por coma: `manana` (antes de las 12), `tarde` (12 a 17), `noche` (desde las 17). |
 | `withKids` | `true` = el grupo tiene niños o bebés: no muestra las experiencias solo para mayores de 18. |
+| `tags` | Intereses, separados por coma (`tags=Vinos,Gastronomía`): experiencias que tengan **alguno** de esos tags. Es lo que usa "Para vos" con los intereses del usuario. |
 
 Fechas, personas, duración y horario se cumplen en **una misma fecha**. El catálogo público muestra solo experiencias publicadas con alguna fecha futura. Es toda la búsqueda del Home: el front solo ordena.
 
@@ -225,9 +241,12 @@ JSON de la parte `experience`:
   "description": "Recorrido guiado por el centro histórico",
   "price": 25000.00,
   "location": "Buenos Aires",
-  "categoryId": 1
+  "categoryId": 1,
+  "tags": ["Historia", "Caminata", "Arquitectura"]
 }
 ```
+`tags` (opcional, hasta 8): los intereses con los que se relaciona la experiencia; la respuesta los devuelve en `tags`
+y además trae `favoriteCount` (cuántas personas la guardaron).
 
 > En Insomnia: en la fila `experience` del form, botón derecho / menú de la fila → *Set content-type* → `application/json`. Si no, Spring devuelve **415 Unsupported Media Type**.
 > **La fila `images` (File) hay que llenarla a mano**: click en el ícono de archivo de esa fila y
@@ -239,7 +258,21 @@ JSON de la parte `experience`:
 > Validaciones: `title` no vacío, `price > 0`, `categoryId` existente, al menos 1 foto no vacía,
 > **`title` no repetido entre las experiencias del mismo publisher** (case-insensitive; el mismo
 > título lo puede usar otro vendedor distinto, no es único globalmente) → `400`. Solo el
-> **publisher** o un **ADMIN** pueden editar/borrar. No se puede borrar una experiencia con sesiones.
+> **publisher** o un **ADMIN** pueden editar/borrar.
+
+### DELETE `/experiences/{id}` — dar de baja con reembolso a todos
+Regla de PLAN: si el anfitrión cancela la experiencia, **nadie se queda sin su plata ni sin aviso**. En una sola transacción:
+1. Por cada fecha futura activa: bloquea la fecha, reembolsa todas las reservas vigentes (quedan `refunded`, los lugares vuelven),
+   avisa por notificación al comprador (y a quien recibió un regalo) y a la lista de espera, y cancela la fecha.
+2. Saca la experiencia de los carritos y de los guardados de todos.
+3. Si **nunca se vendió**, se borra del todo (fechas, reseñas, lista de espera). Si se vendió alguna vez, queda
+   `active=false` con `deletedAt`: desaparece del catálogo y de "Mis experiencias", da `404` al abrirla (salvo ADMIN, que
+   la ve con `status: "DELETED"`), pero las reservas viejas, reseñas y estadísticas siguen existiendo.
+
+Devuelve `200` con el resumen, para que el front lo muestre:
+```json
+{ "experienceId": 12, "removed": false, "cancelledSessions": 3, "refundedBookings": 7 }
+```
 
 ### PATCH `/experiences/{id}/discount` — descuento sobre el producto individual
 ```json
@@ -260,6 +293,13 @@ Solo el dueño de la experiencia o un ADMIN. `discountPercentage` debe ser `0 <=
 | POST | `/experience-sessions` | ver abajo |
 | PUT | `/experience-sessions/{sessionId}` | ver abajo (campos opcionales) |
 | DELETE | `/experience-sessions/{sessionId}` | — (cancela la fecha: ver abajo) |
+| GET | `/experience-sessions/waitlist/mine` | — **(logueado)** ids de las fechas en las que estoy en lista de espera. |
+| POST | `/experience-sessions/{sessionId}/waitlist` | — "Avisame si se libera un lugar": solo en fechas **agotadas**, activas y futuras, de otra persona (`400` si no). Idempotente. |
+| DELETE | `/experience-sessions/{sessionId}/waitlist` | — Me bajo de la lista. |
+
+**Lista de espera:** cada fecha devuelve `waitlistCount` (cuántos esperan). Cuando se libera un lugar (un reembolso, o el
+anfitrión amplía el cupo con `PUT`), el back **notifica a todos los anotados** ("¡Se liberó un lugar!") y los saca de la
+lista: se avisa una sola vez. Si la fecha se cancela, también se les avisa.
 
 > Los listados públicos (`GET /experience-sessions` y `/experience/{id}`) solo devuelven sesiones
 > **activas y futuras** de experiencias activas. Para el historial del anfitrión usar `/manage`.
@@ -379,10 +419,14 @@ de cada experiencia (si tiene), crea la orden + una `Booking` con voucher por ca
 {
   "couponCode": "VERANO2026",
   "paymentMethod": "card",
-  "cardNumber": "4242424242424242"
+  "cardNumber": "4242424242424242",
+  "gift": { "recipientName": "Sofía Pérez", "recipientEmail": "sofia@plan.com", "message": "¡Feliz cumple!" }
 }
 ```
-`couponCode` es opcional. **Pago simulado** (no hay cobro real): `paymentMethod` es `card` (tarjeta nueva,
+`couponCode` es opcional. `gift` también: si viene, la compra es un **regalo**. `recipientName` es obligatorio (hasta 100),
+`recipientEmail` opcional (si corresponde a una cuenta de PLAN distinta del comprador, esa persona ve la reserva en **sus**
+"Mis reservas", recibe la notificación "¡Te regalaron una experiencia!" y puede reseñar), `message` hasta 300. La orden y
+cada reserva devuelven `giftRecipientName`, `giftMessage`, `giftFromName` y `recipientId`. **Pago simulado** (no hay cobro real): `paymentMethod` es `card` (tarjeta nueva,
 requiere `cardNumber` válido por Luhn), `saved` (tarjeta guardada) o una billetera (`mercadopago`, `paypal`,
 `gpay`); sin `paymentMethod` se aprueba directo (útil en Insomnia). La tarjeta de prueba `4000 0000 0000 0002`
 siempre es rechazada (`400` "El banco rechazó la tarjeta…") y en ese caso no se toca nada. Cada orden devuelve
@@ -402,7 +446,7 @@ también `refunded` y `commission` (10% de PLAN).
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| GET | `/bookings?page=0&size=10` | Mis vouchers (ADMIN ve todos). |
+| GET | `/bookings?page=0&size=10` | Mis vouchers: las que compré **y las que me regalaron** (ADMIN ve todas). |
 | GET | `/bookings/sales?page=0&size=10` | **Modo vendedor:** reservas sobre las experiencias que publiqué, con `buyerId`/`buyerName`. |
 | GET | `/bookings/experience/{experienceId}?page=0&size=10` | Reservas de una experiencia puntual. Solo el dueño de esa experiencia o ADMIN (403/404 si no). |
 | GET | `/bookings/{bookingId}` | Una reserva. La ve el comprador, el vendedor de esa experiencia, o ADMIN. |
@@ -413,7 +457,21 @@ Las reservas se generan en el checkout (`POST /orders`).
 **Política de cancelación (`refund`):** el **comprador** puede cancelar hasta **48 h antes** de que
 empiece la sesión (después → `400` con el motivo). El **anfitrión** de la experiencia y un **ADMIN**
 pueden cancelar hasta el inicio (por ejemplo, si se suspende). Una sesión que ya empezó no se reembolsa.
-Una reserva reembolsada no habilita a dejar reseña.
+Una reserva reembolsada no habilita a dejar reseña. Al reembolsar se avisa a la lista de espera de esa fecha y, si
+la reserva era un regalo, también a quien lo recibió ("Regalo cancelado"; la plata vuelve a quien pagó). Quien recibe un
+regalo ve la reserva pero **no** puede pedir el reembolso ni ver la orden (son de quien compró).
+
+---
+
+## 9 bis. Guardados — `/favorites`
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| GET | `/favorites` | Mis guardados: `[{ experienceId, createdAt }]`, el más reciente primero. |
+| POST | `/favorites/{experienceId}` | Guardar (idempotente). `400` si es mi propia experiencia o no está publicada. |
+| DELETE | `/favorites/{experienceId}` | Quitar. `204`. |
+
+Las experiencias devuelven `favoriteCount`. Si una experiencia se da de baja, sale de los guardados de todos.
 
 ---
 
@@ -480,3 +538,7 @@ antes de tocar `POST /orders`.
     → `POST /orders` con `couponCode` → mostrar que el `subtotal` ya usa el precio con descuento.
 12. `GET /orders`, `GET /bookings`, `GET /bookings/sales` (vendedor viendo quién le compró).
 13. (ADMIN) `GET /users`, `PATCH /users/{id}/role`.
+14. `POST /favorites/{id}` (comprador) y `GET /favorites`; `POST /experience-sessions/{id}/waitlist` en una fecha agotada,
+    `POST /bookings/{id}/refund` de otra reserva de esa fecha y mostrar la notificación "¡Se liberó un lugar!".
+15. `POST /orders` con `gift` → el destinatario ve la reserva en `GET /bookings`.
+16. (vendedor) `DELETE /experiences/{id}` → todos reembolsados y avisados; el ADMIN la sigue viendo con `status: "DELETED"`.

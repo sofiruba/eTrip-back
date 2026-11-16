@@ -65,4 +65,12 @@ public class Booking {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "experience_session_id", nullable = false)
     private ExperienceSession experienceSession;
+
+    /**
+     * Si la compra fue un regalo y el destinatario tiene cuenta en PLAN: la reserva también aparece en sus reservas
+     * (puede ver el voucher y reseñar). El dinero y el reembolso siguen siendo de quien compró (order.user).
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "recipient_user_id")
+    private User recipient;
 }

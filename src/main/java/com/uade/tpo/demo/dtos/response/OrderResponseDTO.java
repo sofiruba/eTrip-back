@@ -28,4 +28,8 @@ public class OrderResponseDTO {
     /** Comisión de PLAN (10% del total neto de reembolsos). */
     private BigDecimal commission;
     private List<BookingResponseDTO> bookings;
+    /** Compra como regalo (opcional). */
+    private String giftRecipientName;
+    private String giftRecipientEmail;
+    private String giftMessage;
 }

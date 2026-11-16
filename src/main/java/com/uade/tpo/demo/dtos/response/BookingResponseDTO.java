@@ -40,4 +40,10 @@ public class BookingResponseDTO {
     /** Quien hizo la reserva. Util sobre todo para la vista de vendedor (/bookings/sales). */
     private Long buyerId;
     private String buyerName;
+    /** Si la compra fue un regalo: para quién, la dedicatoria y quién lo regala. */
+    private String giftRecipientName;
+    private String giftMessage;
+    private String giftFromName;
+    /** El usuario que recibió el regalo (si tiene cuenta). */
+    private Long recipientId;
 }
