@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -32,6 +33,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.DiscountCoupon;
 import com.uade.tpo.demo.entity.Experience;
+import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.ExperienceCategory;
 import com.uade.tpo.demo.entity.ExperienceImage;
 import com.uade.tpo.demo.entity.ExperienceSession;
@@ -46,6 +48,7 @@ import com.uade.tpo.demo.repository.BookingRepository;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
+import com.uade.tpo.demo.repository.InterestRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.FavoriteRepository;
 import com.uade.tpo.demo.repository.NotificationRepository;
@@ -92,13 +95,17 @@ public class DataSeeder implements CommandLineRunner {
     private final NotificationRepository notificationRepository;
     private final FavoriteRepository favoriteRepository;
     private final WaitlistRepository waitlistRepository;
+    private final InterestRepository interestRepository;
+    // Intereses por nombre: los usuarios y las experiencias del JSON los nombran así
+    private final Map<String, Interest> interestsByName = new HashMap<>();
 
     public DataSeeder(JdbcTemplate jdbcTemplate, PlatformTransactionManager transactionManager, ObjectMapper objectMapper,
             PasswordEncoder passwordEncoder, UserRepository userRepository, ExperienceCategoryRepository categoryRepository,
             ExperienceRepository experienceRepository, ExperienceSessionRepository sessionRepository,
             DiscountCouponRepository couponRepository, OrderRepository orderRepository, BookingRepository bookingRepository,
             ReviewRepository reviewRepository, NotificationRepository notificationRepository,
-            FavoriteRepository favoriteRepository, WaitlistRepository waitlistRepository) {
+            FavoriteRepository favoriteRepository, WaitlistRepository waitlistRepository,
+            InterestRepository interestRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.transaction = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
@@ -114,6 +121,7 @@ public class DataSeeder implements CommandLineRunner {
         this.notificationRepository = notificationRepository;
         this.favoriteRepository = favoriteRepository;
         this.waitlistRepository = waitlistRepository;
+        this.interestRepository = interestRepository;
     }
 
     @Override
@@ -150,14 +158,18 @@ public class DataSeeder implements CommandLineRunner {
     private void seed(JsonNode data) {
         LocalDateTime now = LocalDateTime.now().withSecond(0).withNano(0);
 
-        // 1. Categorías
+        // 1. Categorías y sus intereses (después el admin los administra desde el panel)
         Map<String, ExperienceCategory> categories = new HashMap<>();
+        interestsByName.clear();
         for (JsonNode node : data.get("categories")) {
             ExperienceCategory category = categoryRepository.save(ExperienceCategory.builder()
                     .name(node.get("name").asText())
                     .description(node.get("description").asText())
                     .build());
             categories.put(category.getName(), category);
+            for (String name : texts(node.get("interests"))) {
+                interestsByName.put(name, interestRepository.save(Interest.builder().name(name).category(category).build()));
+            }
         }
 
         // 2. Cupones (uno vencido y uno desactivado, para probar las validaciones)
@@ -341,9 +353,10 @@ public class DataSeeder implements CommandLineRunner {
                 .password(passwordEncoder.encode(password))
                 .role(role)
                 .active(true)
+                .emailVerified(true) // los emails del seed no existen: las cuentas ya vienen verificadas
                 .city(node.path("city").asText(null))
                 .bio(node.path("bio").asText(null))
-                .interests(texts(node.get("interests")))
+                .interests(interests(node.get("interests")))
                 .build());
     }
 
@@ -354,6 +367,19 @@ public class DataSeeder implements CommandLineRunner {
             array.forEach(value -> values.add(value.asText()));
         }
         return values;
+    }
+
+    /** Intereses nombrados en el JSON (todos tienen que estar en alguna categoría). */
+    private Set<Interest> interests(JsonNode names) {
+        Set<Interest> result = new LinkedHashSet<>();
+        for (String name : texts(names)) {
+            Interest interest = interestsByName.get(name);
+            if (interest == null) {
+                throw new IllegalStateException("El seed nombra el interés \"" + name + "\", que no está en ninguna categoría");
+            }
+            result.add(interest);
+        }
+        return result;
     }
 
     private Experience createExperience(JsonNode node, User host, ExperienceCategory category) {
@@ -367,7 +393,7 @@ public class DataSeeder implements CommandLineRunner {
                 .category(category)
                 .publisher(host)
                 .active(true)
-                .tags(texts(node.get("tags")))
+                .tags(interests(node.get("tags")))
                 .build();
         // Fotos: <slug>-1.jpg, <slug>-2.jpg… (las que haya)
         List<ExperienceImage> images = new ArrayList<>();

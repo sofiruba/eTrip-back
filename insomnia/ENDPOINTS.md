@@ -26,9 +26,10 @@ confunde el nombre en la carpeta/entidad con lo que se ve en pantalla:
 1. Insomnia → *Import* → `eTrip_insomnia.json` (ya trae carpetas + environment "Local").
 2. **Levantar el backend primero** (`./mvnw spring-boot:run`, ver el README para la config de
    MySQL). Si el backend no está corriendo, Insomnia tira error de conexión, no 403.
-3. Correr **POST register** (pide `username` además de nombre/apellido/mail/contraseña) o, si ya
-   tenés usuario, **POST authenticate**. **No hace falta copiar nada a mano**: las 3 requests de
-   `01 - Auth` tienen un *After-Response Script* que guarda `access_token` en la variable `token`
+3. Correr **POST register** (pide `username` además de nombre/apellido/mail/contraseña): la cuenta
+   queda **sin verificar** y llega un código al email. Después **POST verify-email** con ese código.
+   Si ya tenés usuario verificado, **POST authenticate**. **No hace falta copiar el token a mano**: las
+   requests de `01 - Auth` que devuelven token tienen un *After-Response Script* que guarda `access_token` en la variable `token`
    del environment, y además saca el `id` del usuario (viaja como claim `id` adentro del JWT, ver
    `JwtService.buildToken`) y lo guarda en `user_id`. Cada vez que volvés a loguear (otro usuario,
    otro rol) las dos variables se pisan solas con el último login que hiciste.
@@ -48,8 +49,10 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 | Recurso | Permisos |
 |---|---|
 | `/api/v1/auth/**` | público |
-| `GET /experiences/**`, `GET /experience-categories/**`, `GET /experience-sessions/**`, `GET /reviews/experience/**`, `GET /users/{id}` | **público** (el catálogo se ve sin sesión) |
-| `GET /experiences/mine`, `GET /experience-sessions/manage` | CLIENTE o ADMIN (aunque estén bajo un prefijo público) |
+| `GET /experiences/**`, `GET /experience-categories/**`, `GET /interests`, `GET /experience-sessions/**`, `GET /reviews/experience/**`, `GET /users/{id}` | **público** (el catálogo se ve sin sesión) |
+| `GET /experiences/recommended` | CLIENTE o ADMIN (recomendaciones del usuario logueado) |
+| `POST/PUT/DELETE /interests/**` | **solo ADMIN** |
+| `GET /experiences/mine`, `GET /experience-sessions/manage`, `GET /experience-sessions/manage/summary` | CLIENTE o ADMIN (aunque estén bajo un prefijo público) |
 | `POST/PUT/DELETE /experience-categories/**` | **solo ADMIN** |
 | `/users/**` (resto) | CLIENTE o ADMIN (algunas acciones dentro, como `GET /users` o `PATCH .../role`, exigen ADMIN y devuelven 403 si no) |
 | `/experiences`, `/experience-sessions` (escrituras) | CLIENTE o ADMIN; además solo el dueño de la experiencia o un ADMIN (403 si no) |
@@ -73,7 +76,7 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 ### Reglas que agregó la revisión de seguridad (19/10)
 
 - `GET /users/{id}` ajeno/anónimo ya **no** devuelve `role` ni `active` (solo en `/users/me` o para ADMIN).
-- `forgot-password` sigue devolviendo `devCode` en desarrollo, **salvo para cuentas ADMIN** (su código solo sale por la consola del back).
+- `forgot-password` ya no devuelve el código: llega **por mail** (ver "Verificación de email y mails").
 - `register`: el email tiene que tener formato de email (≤150), el username no puede tener `@` (≤50), nombre/apellido ≤100.
 - Fotos de experiencias: hasta 5, de hasta 5 MB, JPG/PNG/WEBP de verdad (si no se decodifica → 400) y como mucho 40 megapíxeles.
 - Los **listados** de experiencias (`GET /experiences`, `/mine`, búsquedas) mandan **solo la portada** en `imagesBase64`; `GET /experiences/{id}` manda todas.
@@ -89,6 +92,26 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
 
 ## 1. Auth — `/api/v1/auth` (público)
 
+### Verificación de email y mails
+
+Para crear una cuenta hay que **probar que el email es tuyo**: el registro manda un código de 6 dígitos y
+recién con ese código se entrega el token. Los mails salen de `equipodeplan@gmail.com` (Gmail con una
+contraseña de aplicación). Las credenciales van en `eTrip back/.env` (**no** se sube a git; copiar `.env.example`):
+
+```
+MAIL_USERNAME=equipodeplan@gmail.com
+MAIL_PASSWORD=<contraseña de aplicación de 16 letras, sin espacios>
+```
+
+Si `MAIL_USERNAME` está vacío, el back no manda nada y escribe el mail (con el código en el asunto) en su consola.
+Si Gmail rechaza el envío → `503` "No pudimos enviar el email…" y no se guarda nada (se puede reintentar).
+
+Los códigos pendientes se guardan en la tabla `verification_codes` (`purpose` = `VERIFY_EMAIL` o
+`RESET_PASSWORD`; como mucho uno de cada tipo por usuario): solo el **hash** del código, vence en **15 minutos**,
+con **5 intentos** se invalida y **no se manda otro mail a la misma cuenta antes de 1 minuto** (mientras tanto sigue
+valiendo el último). La tabla vieja `password_reset_codes` se borra sola al arrancar (`LegacyColumnsCleanup`).
+Las cuentas que ya existían antes de este cambio y las del seed quedan verificadas (`user.email_verified`).
+
 ### POST `/api/v1/auth/register`
 ```json
 {
@@ -96,13 +119,22 @@ usuarios), es porque ese endpoint es solo ADMIN y tu usuario es CLIENTE — ver 
   "firstname": "Nacho",
   "lastname": "Cortes",
   "email": "nacho@etrip.com",
-  "password": "1234",
+  "password": "nacho1234",
   "interests": ["Gastronomía", "Vinos"]
 }
 ```
-`interests` es opcional (máx. 20, los mismos nombres que los `tags` de las experiencias): el Home usa los intereses
-para la sección "Para vos". `username` y `email` son únicos. Si falta cualquier campo → `400`. Si el username o el email ya existen → `400` con
+Respuesta: `{ "email": "nacho@etrip.com" }` (**sin token**): la cuenta queda sin verificar y le llega el código.
+`interests` es opcional (máx. 20): **nombres de intereses que existan** en `GET /interests` (si no, `400`
+"“X” no es un interés de PLAN"). Con ellos el back arma "Para vos". `username` y `email` son únicos. Si falta cualquier campo → `400`. Si el username o el email ya existen → `400` con
 `"Ese nombre de usuario ya está en uso"` / `"Ya hay una cuenta con ese email"`.
+
+### POST `/api/v1/auth/verify-email`
+`{ "usernameOrEmail": "nacho@etrip.com", "code": "123456" }` → `{ "access_token": "eyJ..." }` (queda logueado).
+`400` si el código no es correcto, venció o se agotaron los intentos.
+
+### POST `/api/v1/auth/resend-verification`
+`{ "usernameOrEmail": "nacho@etrip.com" }` → `204` siempre (si la cuenta no existe o ya está verificada no hace
+nada: no le confirma a nadie qué cuentas existen).
 
 ### POST `/api/v1/auth/authenticate`
 Acepta **email o username** en el mismo campo `usernameOrEmail`:
@@ -119,27 +151,25 @@ o
   "password": "1234"
 }
 ```
-Respuesta: `{ "access_token": "eyJ..." }`
+Respuesta: `{ "access_token": "eyJ..." }`. `401` si los datos no son correctos o la cuenta está desactivada.
+**`403` si la contraseña es correcta pero el email no está verificado:** el back le manda un código nuevo y el
+front pasa a la pantalla de verificar.
 
 ### GET `/api/v1/auth/availability?username=nachoc&email=nacho@etrip.com`
 Los dos parámetros son opcionales. Respuesta: `{ "usernameAvailable": false, "emailAvailable": true }`
 (`null` en el que no se mandó). El registro del front lo usa para avisar antes de seguir.
 
 ### Recuperar contraseña (3 pasos)
-El código pendiente se guarda en la tabla `password_reset_codes` (hash del código, vencimiento e
-intentos fallidos; `user_id` único = como mucho un código por usuario). Se borra al usarlo, al vencer
-o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_code_*`.
+Usa la misma tabla `verification_codes` (`purpose = RESET_PASSWORD`) y las mismas reglas de arriba.
 
-1. **POST `/api/v1/auth/forgot-password`** — `{ "usernameOrEmail": "nacho@etrip.com" }` → `{ "devCode": "123456" }`.
-   Genera un código de 6 dígitos que vence en 15 minutos; pedirlo de nuevo anula el anterior.
-   `404` si la cuenta no existe, `400` si está desactivada. **Por ahora no hay mail:** el código se
-   imprime en la consola del back y, mientras `app.password-reset.show-code=true` (application.properties),
-   viaja en `devCode` y el front lo muestra en la consola del navegador. Al entregar: ponerlo en `false`.
-   Para pasarlo a mail, implementar `PasswordResetSender`.
+1. **POST `/api/v1/auth/forgot-password`** — `{ "usernameOrEmail": "nacho@etrip.com" }` → `204`.
+   Manda **por mail** un código de 6 dígitos que vence en 15 minutos; pedirlo de nuevo (pasado el minuto) anula el anterior.
+   `404` si la cuenta no existe, `400` si está desactivada.
 2. **POST `/api/v1/auth/verify-reset-code`** — `{ "usernameOrEmail": "...", "code": "123456" }` →
    `204` si es válido, `400` si no. No cambia nada. Con 5 intentos fallidos el código se invalida.
 3. **POST `/api/v1/auth/reset-password`** — `{ "usernameOrEmail": "...", "code": "123456", "newPassword": "nueva123" }`
-   → `{ "access_token": "eyJ..." }` (queda logueado). Mínimo 6 caracteres.
+   → `{ "access_token": "eyJ..." }` (queda logueado). Mínimo 6 caracteres. Si la cuenta no estaba verificada,
+   **queda verificada** (el código llegó a su mail, así que el email es suyo).
 
 ---
 
@@ -165,7 +195,7 @@ o al llegar a 5 intentos fallidos. La tabla `user` ya no tiene columnas `reset_c
 }
 ```
 Un campo que no se manda (o `null`) no se toca; un string vacío (`""`) lo borra (la foto también). `bio` hasta 500
-caracteres, `city` 100, la foto hasta 400 KB (data URL o base64 pelado), `interests` hasta 20 de 40 caracteres.
+caracteres, `city` 100, la foto hasta 400 KB (data URL o base64 pelado), `interests` hasta 20 (nombres de `GET /interests`).
 El perfil público (`GET /users/{id}`) muestra `bio`, `city`, `avatarBase64` e `interests` de cualquier usuario:
 es la ficha del anfitrión en la página de la experiencia.
 
@@ -188,6 +218,24 @@ es la ficha del anfitrión en la página de la experiencia.
   "description": "Recorridos guiados por la ciudad"
 }
 ```
+`DELETE` → `400` si la categoría tiene experiencias **o intereses** asociados.
+
+---
+
+## 3 bis. Intereses — `/interests`
+
+Los intereses son una **entidad** (tabla `interests`): cada uno pertenece a una categoría (el grupo con el que se
+muestra) y se relaciona con los usuarios que lo eligieron (`user_interest`) y con las experiencias que lo tienen
+(`experience_interest`). Los administra el ADMIN desde el panel. El seed carga 27.
+
+| Método | Ruta | Permiso | Descripción |
+|---|---|---|---|
+| GET | `/interests` | público | Todos, ordenados por categoría y nombre: `{ id, name, categoryId, categoryName, availableExperiences }`. `availableExperiences` = cuántas experiencias del catálogo público con alguna fecha con lugar lo tienen (lo calcula el back). |
+| POST | `/interests` | **ADMIN** | `{ "name": "Escalada", "categoryId": 2 }` → `201`. Nombre único (`400` si se repite), hasta 40 caracteres. |
+| PUT | `/interests/{id}` | **ADMIN** | Mismo body. Renombrar se ve enseguida en experiencias y perfiles (apuntan al interés, no al texto). |
+| DELETE | `/interests/{id}` | **ADMIN** | `204`. Se lo saca a las experiencias y usuarios que lo tenían. |
+
+En los requests y respuestas de usuarios y experiencias, `interests` / `tags` siguen siendo **listas de nombres**.
 
 ---
 
@@ -220,7 +268,7 @@ es la ficha del anfitrión en la página de la experiencia.
 | `durationMin` / `durationMax` | Duración de la fecha, en minutos. `durationMin > durationMax` → `400`. |
 | `timeSlots` | Franja de inicio, separadas por coma: `manana` (antes de las 12), `tarde` (12 a 17), `noche` (desde las 17). |
 | `withKids` | `true` = el grupo tiene niños o bebés: no muestra las experiencias solo para mayores de 18. |
-| `tags` | Intereses, separados por coma (`tags=Vinos,Gastronomía`): experiencias que tengan **alguno** de esos tags. Es lo que usa "Para vos" con los intereses del usuario. |
+| `tags` | Intereses, separados por coma (`tags=Vinos,Gastronomía`): experiencias que tengan **alguno** de esos intereses (por nombre). |
 
 Fechas, personas, duración y horario se cumplen en **una misma fecha**. El catálogo público muestra solo experiencias publicadas con alguna fecha futura. Es toda la búsqueda del Home: el front solo ordena.
 
@@ -245,8 +293,17 @@ JSON de la parte `experience`:
   "tags": ["Historia", "Caminata", "Arquitectura"]
 }
 ```
-`tags` (opcional, hasta 8): los intereses con los que se relaciona la experiencia; la respuesta los devuelve en `tags`
-y además trae `favoriteCount` (cuántas personas la guardaron).
+`tags` (opcional, hasta 8): nombres de intereses de `GET /interests` (`400` si alguno no existe); la respuesta los
+devuelve en `tags` y además trae `favoriteCount` (cuántas personas la guardaron).
+
+### GET `/experiences/recommended?viewed=12,5` — "Para vos" (con sesión)
+Devuelve hasta 8 `[{ "experience": { …como en los listados… }, "reason": "Porque te gusta vinos y gastronomía" }]`.
+Lo calcula el back con un **perfil de gustos**: cada experiencia del catálogo con fecha disponible suma puntos por
+cada interés que comparte con los intereses del usuario (x3), con lo que guardó o reservó (x2) y con lo que vio
+hace poco (x1; `viewed` = ids que manda el front, porque "vistos" vive en el navegador). No se recomiendan las
+propias, las guardadas ni las que ya reservó. Desempata el promedio de reseñas. `reason` es lo que más sumó:
+"Porque te gusta…", "Parecida a “…”, que guardaste", "Porque fuiste a “…”", "Parecida a “…”, que reservaste",
+"Porque viste “…”". Sin sesión → `403`.
 
 > En Insomnia: en la fila `experience` del form, botón derecho / menú de la fila → *Set content-type* → `application/json`. Si no, Spring devuelve **415 Unsupported Media Type**.
 > **La fila `images` (File) hay que llenarla a mano**: click en el ícono de archivo de esa fila y
@@ -289,6 +346,7 @@ Solo el dueño de la experiencia o un ADMIN. `discountPercentage` debe ser `0 <=
 | GET | `/experience-sessions?page=&size=&...filtros` | — (ver filtros abajo) |
 | GET | `/experience-sessions/experience/{experienceId}?page=&size=&onlyAvailable=` | — |
 | GET | `/experience-sessions/manage` | — **(logueado)** fechas que gestiono, **incluidas pasadas y canceladas**: ADMIN recibe todas; cualquier otro usuario, las de sus experiencias. Lista simple (no paginada), ordenada por `startsAt`. |
+| GET | `/experience-sessions/manage/summary` | — **(logueado)** "Fechas y huéspedes" del anfitrión: una fila por cada experiencia suya (también sin fechas) con `nextSessionAt`, `upcomingSessions` / `finishedSessions` / `cancelledSessions`, y de las próximas `bookedSeats`, `capacity`, `occupancyPercent` y `waitlistCount`. Primero las que tienen la próxima fecha más cerca. |
 | GET | `/experience-sessions/{sessionId}` | — |
 | POST | `/experience-sessions` | ver abajo |
 | PUT | `/experience-sessions/{sessionId}` | ver abajo (campos opcionales) |
@@ -424,8 +482,17 @@ de cada experiencia (si tiene), crea la orden + una `Booking` con voucher por ca
 }
 ```
 `couponCode` es opcional. `gift` también: si viene, la compra es un **regalo**. `recipientName` es obligatorio (hasta 100),
-`recipientEmail` opcional (si corresponde a una cuenta de PLAN distinta del comprador, esa persona ve la reserva en **sus**
-"Mis reservas", recibe la notificación "¡Te regalaron una experiencia!" y puede reseñar), `message` hasta 300. La orden y
+`recipientEmail` opcional: con email, el back le manda un **mail de aviso** (experiencia, fecha, lugar, personas y
+dedicatoria; **sin el voucher**, así un email mal escrito no le sirve a nadie). El regalo **pasa a ser de quien lo recibe
+solo cuando tiene una cuenta verificada con ese email**: si ya la tiene, en el momento (lo ve en **sus** "Mis reservas",
+recibe "¡Te regalaron una experiencia!" y puede reseñar); si no, queda **pendiente** y se le entrega cuando se registra
+y verifica ese email ("¡Tenés un regalo esperándote!"). Mientras está pendiente, el voucher es de quien pagó, que puede:
+- `PATCH /orders/{id}/gift` `{ "recipientEmail": "bien@escrito.com" }` → corrige el email y reenvía el aviso (si es de una
+  cuenta verificada, se entrega ya). `400` si ya se entregó o ya no está vigente; `403` si no es quien pagó.
+- `DELETE /orders/{id}/gift` → se lo queda: deja de ser un regalo.
+
+La orden y cada reserva traen `giftStatus`: `PENDING`, `DELIVERED` o `IN_PERSON` (sin email: se entrega en mano).
+Si el mail no se puede mandar al comprar, la compra no se deshace: el comprador recibe un aviso. `message` hasta 300. La orden y
 cada reserva devuelven `giftRecipientName`, `giftMessage`, `giftFromName` y `recipientId`. **Pago simulado** (no hay cobro real): `paymentMethod` es `card` (tarjeta nueva,
 requiere `cardNumber` válido por Luhn), `saved` (tarjeta guardada) o una billetera (`mercadopago`, `paypal`,
 `gpay`); sin `paymentMethod` se aprueba directo (útil en Insomnia). La tarjeta de prueba `4000 0000 0000 0002`

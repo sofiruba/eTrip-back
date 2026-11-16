@@ -5,14 +5,13 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.Base64;
-import java.util.LinkedHashSet;
 import java.util.List;
 
 import com.uade.tpo.demo.dtos.request.UserUpdateDTO;
 import com.uade.tpo.demo.dtos.response.UserResponseDTO;
 import com.uade.tpo.demo.entity.Role;
+import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -21,6 +20,7 @@ import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.service.InterestService;
 import com.uade.tpo.demo.service.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -29,10 +29,14 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class UserServiceImpl implements UserService {
 
+    /** Hasta cuántos intereses puede elegir una persona (el registro usa el mismo límite). */
+    public static final int MAX_INTERESTS = 20;
+
     private final UserRepository userRepository;
     private final ExperienceRepository experienceRepository;
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
+    private final InterestService interestService;
 
     // Mi perfil completo + contadores. El usuario sale del token, no de la URL.
     @Override
@@ -82,7 +86,7 @@ public class UserServiceImpl implements UserService {
             user.setAvatar(decodeAvatar(request.getAvatarBase64()));
         }
         if (request.getInterests() != null) {
-            user.setInterests(cleanInterests(request.getInterests()));
+            user.setInterests(interestService.resolve(request.getInterests(), MAX_INTERESTS));
         }
         return toResponse(userRepository.save(user), true);
     }
@@ -106,25 +110,6 @@ public class UserServiceImpl implements UserService {
             throw new BadRequestException("La foto de perfil es demasiado grande");
         }
         return bytes;
-    }
-
-    /** Intereses sin repetir ni espacios de más, hasta 20 de hasta 40 caracteres (lo usan el perfil y el registro). */
-    public static List<String> cleanInterests(List<String> raw) throws BadRequestException {
-        LinkedHashSet<String> clean = new LinkedHashSet<>();
-        for (String interest : raw) {
-            if (interest == null || interest.isBlank()) {
-                continue;
-            }
-            String trimmed = interest.trim();
-            if (trimmed.length() > 40) {
-                throw new BadRequestException("Cada interés puede tener hasta 40 caracteres");
-            }
-            clean.add(trimmed);
-        }
-        if (clean.size() > 20) {
-            throw new BadRequestException("Podés elegir hasta 20 intereses");
-        }
-        return new ArrayList<>(clean);
     }
 
     // Perfil de otro usuario; datos completos solo si sos vos mismo o ADMIN.
@@ -218,7 +203,7 @@ public class UserServiceImpl implements UserService {
                 .bio(user.getBio())
                 .city(user.getCity())
                 .avatarBase64(user.getAvatar() != null ? Base64.getEncoder().encodeToString(user.getAvatar()) : null)
-                .interests(user.getInterests() != null ? new ArrayList<>(user.getInterests()) : List.of())
+                .interests(interestNames(user.getInterests()))
                 .publishedExperiences(experienceRepository.countByPublisherIdAndDeletedAtIsNull(user.getId()));
 
         if (includePrivate) {
@@ -230,5 +215,10 @@ public class UserServiceImpl implements UserService {
         }
 
         return builder.build();
+    }
+
+    /** Nombres de los intereses, como los usa el front. */
+    public static List<String> interestNames(java.util.Collection<Interest> interests) {
+        return interests == null ? List.of() : interests.stream().map(Interest::getName).toList();
     }
 }

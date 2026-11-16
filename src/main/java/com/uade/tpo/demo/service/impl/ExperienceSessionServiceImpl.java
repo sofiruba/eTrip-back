@@ -1,6 +1,8 @@
 package com.uade.tpo.demo.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.data.domain.Page;
@@ -10,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
+import com.uade.tpo.demo.dtos.response.HostAgendaItemDTO;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Booking;
@@ -67,6 +70,55 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 ? experienceSessionRepository.findAllByOrderByStartsAtAsc()
                 : experienceSessionRepository.findByExperience_Publisher_IdOrderByStartsAtAsc(currentUser.getId());
         return sessions.stream().map(this::mapToResponseDTO).toList();
+    }
+
+    // "Fechas y huéspedes" del anfitrión: una fila por experiencia (también las que no tienen fechas), con cuántas
+    // fechas tiene en cada estado y cómo vienen las próximas. Primero las que tienen la próxima fecha más cerca.
+    @Override
+    @Transactional(readOnly = true)
+    public List<HostAgendaItemDTO> getHostAgenda(User currentUser) {
+        List<HostAgendaItemDTO> agenda = new ArrayList<>();
+        for (Experience experience : experienceRepository.findByPublisherIdAndDeletedAtIsNullOrderByTitleAsc(currentUser.getId())) {
+            int upcoming = 0;
+            int finished = 0;
+            int cancelled = 0;
+            int booked = 0;
+            int capacity = 0;
+            long waitlist = 0;
+            LocalDateTime next = null;
+            List<ExperienceSession> sessions = experience.getSessions() != null ? experience.getSessions() : List.of();
+            for (ExperienceSession session : sessions) {
+                String status = status(session);
+                if ("CANCELLED".equals(status)) {
+                    cancelled++;
+                } else if ("FINISHED".equals(status)) {
+                    finished++;
+                } else {
+                    upcoming++;
+                    booked += calculateBookedSeats(session);
+                    capacity += session.getCapacity() != null ? session.getCapacity() : 0;
+                    waitlist += waitlistService.count(session.getId());
+                    if (next == null || session.getStartsAt().isBefore(next)) {
+                        next = session.getStartsAt();
+                    }
+                }
+            }
+            agenda.add(HostAgendaItemDTO.builder()
+                    .experienceId(experience.getId())
+                    .experienceTitle(experience.getTitle())
+                    .experienceActive(experience.isActive())
+                    .nextSessionAt(next)
+                    .upcomingSessions(upcoming)
+                    .finishedSessions(finished)
+                    .cancelledSessions(cancelled)
+                    .bookedSeats(booked)
+                    .capacity(capacity)
+                    .occupancyPercent(capacity > 0 ? Math.round(booked * 100f / capacity) : 0)
+                    .waitlistCount(waitlist)
+                    .build());
+        }
+        agenda.sort(Comparator.comparing(HostAgendaItemDTO::getNextSessionAt, Comparator.nullsLast(Comparator.naturalOrder())));
+        return agenda;
     }
 
     // Un turno puntual por id.

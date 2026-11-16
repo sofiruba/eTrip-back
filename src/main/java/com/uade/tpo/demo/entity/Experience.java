@@ -5,17 +5,18 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
 
 import jakarta.persistence.CascadeType;
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
@@ -75,11 +76,13 @@ public class Experience {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
-    /** Etiquetas (hasta 8) con los mismos nombres que los intereses de los usuarios: "Vinos", "Caminata"… */
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "experience_tags", joinColumns = @JoinColumn(name = "experience_id"))
-    @Column(name = "tag", length = 40)
-    private List<String> tags;
+    /** Intereses con los que el anfitrión etiqueta la experiencia (hasta 8): son los mismos que eligen los usuarios. */
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "experience_interest",
+            joinColumns = @JoinColumn(name = "experience_id"),
+            inverseJoinColumns = @JoinColumn(name = "interest_id"))
+    @OrderBy("name ASC")
+    private Set<Interest> tags;
 
     @OneToMany(mappedBy = "experience", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")

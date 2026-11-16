@@ -1,12 +1,12 @@
 {
   "categories": [
-    { "name": "Aventura y naturaleza", "description": "Trekking, paisajes, cerros, lagos y escapadas al aire libre." },
-    { "name": "Deportes y aire libre", "description": "Kayak, surf, bici, escalada y todo lo que se haga moviéndose." },
-    { "name": "Gastronomía", "description": "Catas, cocina con locales, mercados y mesas compartidas." },
-    { "name": "Arte y creatividad", "description": "Talleres para hacer algo con tus manos: cerámica, pintura, foto." },
-    { "name": "Cultura y vida local", "description": "Barrios, historia y la ciudad contada por quienes viven ahí." },
-    { "name": "Bienestar y social", "description": "Yoga, meditación y planes para conocer gente nueva." },
-    { "name": "Música y noche", "description": "Tango, peñas, jazz y bares que no salen en las guías." }
+    { "name": "Aventura y naturaleza", "description": "Trekking, paisajes, cerros, lagos y escapadas al aire libre.", "interests": ["Naturaleza", "Senderismo", "Caminata", "Camping"] },
+    { "name": "Deportes y aire libre", "description": "Kayak, surf, bici, escalada y todo lo que se haga moviéndose.", "interests": ["Ciclismo", "Canotaje", "Natación", "Surf", "Vela"] },
+    { "name": "Gastronomía", "description": "Catas, cocina con locales, mercados y mesas compartidas.", "interests": ["Gastronomía", "Cocina", "Vinos", "Tragos", "Café"] },
+    { "name": "Arte y creatividad", "description": "Talleres para hacer algo con tus manos: cerámica, pintura, foto.", "interests": ["Arte", "Fotografía"] },
+    { "name": "Cultura y vida local", "description": "Barrios, historia y la ciudad contada por quienes viven ahí.", "interests": ["Cultura local", "Historia", "Arquitectura", "Museos", "Compras"] },
+    { "name": "Bienestar y social", "description": "Yoga, meditación y planes para conocer gente nueva.", "interests": ["Yoga", "Meditación", "Juegos de mesa"] },
+    { "name": "Música y noche", "description": "Tango, peñas, jazz y bares que no salen en las guías.", "interests": ["Música en vivo", "Canto", "Vida nocturna"] }
   ],
   "coupons": [
     { "code": "BIENVENIDA15", "percentage": 15, "validFromDays": -30, "validUntilDays": 120, "active": true },

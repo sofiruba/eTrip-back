@@ -3,6 +3,7 @@ package com.uade.tpo.demo.exceptions;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.mail.MailException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticationException;
@@ -52,6 +53,14 @@ public class GlobalExceptionHandler {
                 ? "Tu cuenta está desactivada. Pedile a un administrador que la reactive."
                 : "Usuario o contraseña incorrectos";
         return error(HttpStatus.UNAUTHORIZED, message);
+    }
+
+    // El servidor de mail (Gmail) no aceptó el envío: credenciales mal, sin conexión, etc.
+    // El pedido no se guarda (la transacción se deshace), así que se puede volver a intentar.
+    @ExceptionHandler(MailException.class)
+    public ResponseEntity<ErrorResponse> handleMail(MailException ex) {
+        log.error("No se pudo enviar un mail", ex);
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "No pudimos enviar el email. Probá de nuevo en unos minutos.");
     }
 
     // Un dato que la base no acepta (texto demasiado largo, un valor único repetido por dos pedidos a la vez):

@@ -11,6 +11,7 @@ import java.util.UUID;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,11 +42,14 @@ import com.uade.tpo.demo.dtos.request.GiftRequestDTO;
 import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.BookingService;
 import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.MailService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class OrderServiceImpl implements OrderService {
@@ -65,6 +69,7 @@ public class OrderServiceImpl implements OrderService {
     private final EntityManager entityManager;
     private final BookingService bookingService;
     private final UserRepository userRepository;
+    private final MailService mailService;
 
     // Mis órdenes; ADMIN ve las de todos.
     @Override
@@ -228,9 +233,10 @@ public class OrderServiceImpl implements OrderService {
         long totalTickets = items.stream().mapToLong(CartItem::getQuantity).sum();
         // ¿Es un regalo? Se valida acá (antes de tocar cupos) y, si el destinatario tiene cuenta, se le asignan las reservas
         GiftRequestDTO gift = cleanGift(request != null ? request.getGift() : null);
-        User recipient = gift != null && gift.getRecipientEmail() != null
-                ? userRepository.findByEmail(gift.getRecipientEmail()).filter(found -> !found.getId().equals(user.getId())).orElse(null)
-                : null;
+        // Solo se entrega en el momento si ese email es de una cuenta VERIFICADA (probó que el email es suyo).
+        // Si no, el regalo queda pendiente: las reservas siguen siendo de quien pagó hasta que esa persona cree su cuenta
+        // y verifique el email (AuthenticationService.claimGifts). Así, un email mal escrito no le regala el plan a otro.
+        User recipient = gift != null && gift.getRecipientEmail() != null ? verifiedRecipient(gift.getRecipientEmail(), user) : null;
         // Crea la orden, genera un Booking por cada item, descuenta los cupos de las sesiones y vacía el carrito.
         Order order = Order.builder()
                 .user(user)
@@ -266,7 +272,11 @@ public class OrderServiceImpl implements OrderService {
             if (gift != null) {
                 notificationService.create(user, "Regalo confirmado",
                         "Tu regalo de \"" + experience.getTitle() + "\" para " + gift.getRecipientName() + " está confirmado. "
-                                + "El voucher está en Mis reservas.");
+                                + (recipient != null ? "Ya está en sus reservas."
+                                        : gift.getRecipientEmail() != null
+                                                ? "Le mandamos una invitación a " + gift.getRecipientEmail()
+                                                        + ": se lo pasamos cuando entre a PLAN con ese email. Hasta entonces el voucher es tuyo."
+                                                : "El voucher está en Mis reservas para que se lo des."));
                 if (recipient != null) {
                     notificationService.create(recipient, "¡Te regalaron una experiencia!",
                             user.getFirstName() + " te regaló \"" + experience.getTitle() + "\". "
@@ -283,6 +293,20 @@ public class OrderServiceImpl implements OrderService {
         }
 
         cartItemRepository.deleteAll(items);
+
+        // Regalo con email: le avisamos por mail a quien lo recibe (sin el voucher: lo ve en PLAN cuando el regalo es suyo).
+        // Va al final, cuando ya está todo guardado. Si el mail falla, la compra no se deshace (ya está pagada).
+        if (gift != null && gift.getRecipientEmail() != null) {
+            try {
+                mailService.sendGift(gift.getRecipientEmail(), gift.getRecipientName(), user, gift.getMessage(), bookings,
+                        recipient != null);
+            } catch (MailException e) {
+                log.warn("No se pudo mandar el mail del regalo de la orden {}", order.getId(), e);
+                notificationService.create(user, "No pudimos mandar el mail del regalo",
+                        "El regalo para " + gift.getRecipientName() + " está confirmado, pero no le pudimos mandar el mail. "
+                                + "Revisá el email desde la reserva y probá de nuevo.");
+            }
+        }
 
         order.setBookings(bookings);
         return toResponse(order);
@@ -461,7 +485,88 @@ public class OrderServiceImpl implements OrderService {
                 .giftRecipientName(order.getGiftRecipientName())
                 .giftRecipientEmail(order.getGiftRecipientEmail())
                 .giftMessage(order.getGiftMessage())
+                .giftStatus(orderGiftStatus(order))
                 .build();
+    }
+
+    // Estado del regalo de la orden (null si no es un regalo): DELIVERED si alguna reserva ya tiene dueño
+    private String orderGiftStatus(Order order) {
+        if (order.getGiftRecipientName() == null) {
+            return null;
+        }
+        boolean delivered = order.getBookings() != null && order.getBookings().stream().anyMatch(b -> b.getRecipient() != null);
+        return delivered ? "DELIVERED" : order.getGiftRecipientEmail() != null ? "PENDING" : "IN_PERSON";
+    }
+
+    // Cuenta verificada y activa con ese email (y que no sea quien compra): a esa sí se le puede entregar el regalo
+    private User verifiedRecipient(String email, User buyer) {
+        return userRepository.findByEmail(email)
+                .filter(found -> !found.getId().equals(buyer.getId()) && found.isEmailVerified() && found.isActive())
+                .orElse(null);
+    }
+
+    // Corrige el email de un regalo pendiente. Si el email nuevo es de una cuenta verificada, se le entrega ya;
+    // si no, queda pendiente. En los dos casos le mandamos el mail a la dirección nueva.
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public OrderResponseDTO updateGiftEmail(Long orderId, String recipientEmail, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        Order order = pendingGift(orderId, user);
+        String email = recipientEmail != null ? recipientEmail.trim().toLowerCase() : "";
+        if (email.isEmpty() || email.length() > 150 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            throw new BadRequestException("Ingresá un email válido");
+        }
+        if (email.equalsIgnoreCase(user.getEmail())) {
+            throw new BadRequestException("Ese es tu propio email");
+        }
+        order.setGiftRecipientEmail(email);
+        List<Booking> active = order.getBookings().stream().filter(b -> !b.isRefunded()).toList();
+        User recipient = verifiedRecipient(email, user);
+        if (recipient != null) {
+            active.forEach(booking -> booking.setRecipient(recipient));
+            bookingRepository.saveAll(active);
+            notificationService.create(recipient, "¡Te regalaron una experiencia!",
+                    user.getFirstName() + " te hizo un regalo. Ya está en tus reservas, con el voucher.");
+        }
+        orderRepository.save(order);
+        // Acá sí: si el mail no sale, no se guarda el cambio y quien regaló ve el error para reintentar
+        mailService.sendGift(email, order.getGiftRecipientName(), user, order.getGiftMessage(), active, recipient != null);
+        return toResponse(order);
+    }
+
+    // Quien pagó se queda con un regalo pendiente: deja de ser un regalo y las reservas son suyas, como cualquier compra.
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public OrderResponseDTO cancelGift(Long orderId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        Order order = pendingGift(orderId, user);
+        order.setGiftRecipientName(null);
+        order.setGiftRecipientEmail(null);
+        order.setGiftMessage(null);
+        orderRepository.save(order);
+        return toResponse(order);
+    }
+
+    // Orden de quien pide, que es un regalo todavía sin dueño y con alguna reserva vigente
+    private Order pendingGift(Long orderId, User user) throws ResourceNotFoundException, ForbiddenException, BadRequestException {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("La orden no existe"));
+        if (order.getUser() == null || !order.getUser().getId().equals(user.getId())) {
+            throw new ForbiddenException("Solo quien hizo el regalo puede cambiarlo");
+        }
+        if (order.getGiftRecipientName() == null) {
+            throw new BadRequestException("Esta compra no es un regalo");
+        }
+        if (order.getBookings().stream().anyMatch(b -> b.getRecipient() != null)) {
+            throw new BadRequestException("El regalo ya es de " + order.getGiftRecipientName() + ": no se puede cambiar");
+        }
+        LocalDateTime now = LocalDateTime.now();
+        boolean anyActive = order.getBookings().stream().anyMatch(b -> !b.isRefunded()
+                && b.getExperienceSession() != null && b.getExperienceSession().getStartsAt().isAfter(now));
+        if (!anyActive) {
+            throw new BadRequestException("El regalo ya no está vigente (la fecha pasó o se reembolsó)");
+        }
+        return order;
     }
 
     // Estado de la reserva: REFUNDED, COMPLETED (la fecha ya terminó) o CONFIRMED.

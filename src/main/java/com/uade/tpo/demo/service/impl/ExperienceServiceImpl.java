@@ -11,9 +11,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -33,11 +38,14 @@ import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
+import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
 import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
 import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.ExperienceImage;
+import com.uade.tpo.demo.entity.Favorite;
+import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
@@ -55,6 +63,7 @@ import com.uade.tpo.demo.repository.WaitlistRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.ExperienceService;
+import com.uade.tpo.demo.service.InterestService;
 import com.uade.tpo.demo.service.NotificationService;
 import com.uade.tpo.demo.service.WaitlistService;
 
@@ -66,6 +75,9 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class ExperienceServiceImpl implements ExperienceService {
+
+    /** Hasta cuántos intereses puede tener una experiencia. */
+    private static final int MAX_TAGS = 8;
 
     // Lado mas largo permitido para una foto de experiencia, en pixeles.
     private static final int IMAGE_MAX_DIMENSION = 1600;
@@ -88,6 +100,7 @@ public class ExperienceServiceImpl implements ExperienceService {
     private final CartItemRepository cartItemRepository;
     private final FavoriteRepository favoriteRepository;
     private final WaitlistRepository waitlistRepository;
+    private final InterestService interestService;
     private final NotificationService notificationService;
     private final WaitlistService waitlistService;
     private final EntityManager entityManager;
@@ -162,7 +175,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .price(request.getPrice())
                 .location(trimToNull(request.getLocation()))
                 .adultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()))
-                .tags(cleanTags(request.getTags()))
+                .tags(interestService.resolve(request.getTags(), MAX_TAGS))
                 .category(category)
                 .publisher(publisher)
                 .build();
@@ -201,7 +214,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         experience.setPrice(request.getPrice());
         experience.setLocation(trimToNull(request.getLocation()));
         experience.setAdultsOnly(Boolean.TRUE.equals(request.getAdultsOnly()));
-        experience.setTags(cleanTags(request.getTags()));
+        experience.setTags(interestService.resolve(request.getTags(), MAX_TAGS));
         List<MultipartFile> validImages = nonEmptyImages(images);
         if (!validImages.isEmpty()) {
             if (experience.getImages() != null) {
@@ -329,6 +342,113 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
+    // Pesos del "perfil de gustos": un interés elegido pesa más que algo guardado o reservado, y eso más que algo visto
+    private static final int WEIGHT_INTEREST = 3;
+    private static final int WEIGHT_FAVORITE = 2;
+    private static final int WEIGHT_BOOKED = 2;
+    private static final int WEIGHT_VIEWED = 1;
+    private static final int MAX_RECOMMENDATIONS = 8;
+
+    /** Una experiencia que dice algo de los gustos del usuario (la guardó, la reservó o la vio) y cuánto pesa. */
+    private record TasteSource(Experience experience, int weight, String reasonFormat) {
+    }
+
+    // "Para vos": experiencias del catálogo con fecha disponible que se parecen a lo que le gusta al usuario.
+    // Cada candidata suma puntos por los intereses que comparte con:
+    //   - los intereses que eligió (x3),
+    //   - lo que guardó o reservó (x2 por cada interés en común),
+    //   - lo que vio hace poco (x1; los ids los manda el front, "vistos" vive en el navegador).
+    // No se recomiendan las propias, las guardadas ni las que ya reservó. El motivo es lo que más sumó.
+    @Override
+    @Transactional(readOnly = true)
+    public List<RecommendationResponseDTO> recommend(User currentUser, List<Long> viewedIds) {
+        User user = userRepository.findById(currentUser.getId()).orElse(currentUser);
+        Set<Interest> interests = user.getInterests() != null ? user.getInterests() : Set.of();
+
+        // 1. Lo que hizo: guardadas, reservadas (no reembolsadas) y vistas. Si una experiencia aparece en
+        //    más de una, se queda con la señal que más pesa.
+        Map<Long, TasteSource> sources = new LinkedHashMap<>();
+        Set<Long> excluded = new HashSet<>();
+        for (Favorite favorite : favoriteRepository.findByUserIdOrderByCreatedAtDesc(user.getId())) {
+            excluded.add(favorite.getExperience().getId());
+            addSource(sources, new TasteSource(favorite.getExperience(), WEIGHT_FAVORITE, "Parecida a “%s”, que guardaste"));
+        }
+        LocalDateTime now = LocalDateTime.now();
+        for (Booking booking : bookingRepository.findByOrder_User_IdOrRecipient_Id(user.getId(), user.getId(), Pageable.unpaged())) {
+            // Un regalo que compró para otra persona no dice nada de sus gustos
+            boolean giftForSomeoneElse = booking.getRecipient() != null && !booking.getRecipient().getId().equals(user.getId());
+            if (booking.isRefunded() || giftForSomeoneElse) {
+                continue;
+            }
+            ExperienceSession session = booking.getExperienceSession();
+            excluded.add(session.getExperience().getId());
+            boolean past = session.getStartsAt() != null && session.getStartsAt().isBefore(now);
+            addSource(sources, new TasteSource(session.getExperience(), WEIGHT_BOOKED,
+                    past ? "Porque fuiste a “%s”" : "Parecida a “%s”, que reservaste"));
+        }
+        if (viewedIds != null && !viewedIds.isEmpty()) {
+            for (Experience viewed : experienceRepository.findAllById(viewedIds.stream().limit(MAX_RECOMMENDATIONS).toList())) {
+                if (viewed.getDeletedAt() == null) {
+                    addSource(sources, new TasteSource(viewed, WEIGHT_VIEWED, "Porque viste “%s”"));
+                }
+            }
+        }
+
+        // 2. Candidatas: lo mismo que muestra el catálogo con "solo con lugares", sin las propias ni las excluidas
+        ExperienceSearchDTO onlyAvailable = ExperienceSearchDTO.builder().onlyAvailable(true).build();
+        List<RecommendationResponseDTO> scored = new ArrayList<>();
+        Map<Long, Integer> scores = new HashMap<>();
+        for (Experience candidate : experienceRepository.findAll(ExperienceSpecifications.withFilters(onlyAvailable, false, false))) {
+            if (candidate.getPublisher().getId().equals(user.getId()) || excluded.contains(candidate.getId())) {
+                continue;
+            }
+            Set<Interest> tags = candidate.getTags() != null ? candidate.getTags() : Set.of();
+
+            // Intereses elegidos que tiene la experiencia
+            List<String> matched = tags.stream().filter(interests::contains).map(Interest::getName).toList();
+            int score = matched.size() * WEIGHT_INTEREST;
+            int bestPoints = score;
+            String reason = matched.isEmpty() ? null : "Porque te gusta " + joinNames(matched);
+
+            // Parecido con cada experiencia que guardó, reservó o vio (cuántos intereses comparten)
+            for (TasteSource source : sources.values()) {
+                if (source.experience().getId().equals(candidate.getId()) || source.experience().getTags() == null) {
+                    continue;
+                }
+                long shared = tags.stream().filter(source.experience().getTags()::contains).count();
+                int points = (int) shared * source.weight();
+                score += points;
+                if (points > bestPoints) {
+                    bestPoints = points;
+                    reason = String.format(source.reasonFormat(), source.experience().getTitle());
+                }
+            }
+            if (score > 0) {
+                scores.put(candidate.getId(), score);
+                scored.add(RecommendationResponseDTO.builder().experience(toListResponse(candidate)).reason(reason).build());
+            }
+        }
+
+        // 3. Las de más puntos primero; si empatan, la mejor puntuada por las reseñas
+        return scored.stream()
+                .sorted(Comparator.comparing((RecommendationResponseDTO r) -> scores.get(r.getExperience().getId())).reversed()
+                        .thenComparing(r -> r.getExperience().getAverageRating() != null ? r.getExperience().getAverageRating() : 0.0,
+                                Comparator.reverseOrder()))
+                .limit(MAX_RECOMMENDATIONS)
+                .toList();
+    }
+
+    private void addSource(Map<Long, TasteSource> sources, TasteSource source) {
+        sources.merge(source.experience().getId(), source,
+                (current, candidate) -> candidate.weight() > current.weight() ? candidate : current);
+    }
+
+    // ["Vinos", "Gastronomía", "Café"] → "vinos y gastronomía" (como mucho dos, para que el motivo sea corto)
+    private String joinNames(List<String> names) {
+        List<String> lower = names.stream().limit(2).map(String::toLowerCase).toList();
+        return String.join(" y ", lower);
+    }
+
     private Experience findExperience(Long experienceId) throws ResourceNotFoundException {
         return experienceRepository.findById(experienceId)
                 .orElseThrow(() -> new ResourceNotFoundException("La experiencia no existe"));
@@ -382,28 +502,6 @@ public class ExperienceServiceImpl implements ExperienceService {
                 || request.getLocation().matches(".*\\d.*")) {
             throw new BadRequestException("Indicá un barrio y una ciudad válidos, sin dirección exacta.");
         }
-    }
-
-    // Etiquetas sin repetir ni espacios de más, hasta 8 de hasta 40 caracteres
-    private List<String> cleanTags(List<String> raw) throws BadRequestException {
-        if (raw == null) {
-            return new ArrayList<>();
-        }
-        LinkedHashSet<String> clean = new LinkedHashSet<>();
-        for (String tag : raw) {
-            if (tag == null || tag.isBlank()) {
-                continue;
-            }
-            String trimmed = tag.trim();
-            if (trimmed.length() > 40) {
-                throw new BadRequestException("Cada etiqueta puede tener hasta 40 caracteres");
-            }
-            clean.add(trimmed);
-        }
-        if (clean.size() > 8) {
-            throw new BadRequestException("Podés elegir hasta 8 etiquetas");
-        }
-        return new ArrayList<>(clean);
     }
 
     private void assertNotDeleted(Experience experience) throws BadRequestException {
@@ -599,7 +697,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 .publisherName(publisherName(experience.getPublisher()))
                 .averageRating(averageRating)
                 .reviewCount(reviewCount)
-                .tags(experience.getTags() != null ? new ArrayList<>(experience.getTags()) : List.of())
+                .tags(UserServiceImpl.interestNames(experience.getTags()))
                 .favoriteCount(favoriteRepository.countByExperienceId(experience.getId()))
                 .build();
     }

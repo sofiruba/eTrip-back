@@ -2,16 +2,18 @@ package com.uade.tpo.demo.entity;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
-import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
-import jakarta.persistence.ElementCollection;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Lob;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -75,11 +77,13 @@ public class User implements UserDetails {
     @Column(columnDefinition = "MEDIUMBLOB")
     private byte[] avatar;
 
-    /** Intereses elegidos (hasta 20). Las experiencias tienen tags con los mismos nombres: así se recomiendan. */
-    @ElementCollection(fetch = FetchType.EAGER)
-    @CollectionTable(name = "user_interests", joinColumns = @JoinColumn(name = "user_id"))
-    @Column(name = "interest", length = 40)
-    private List<String> interests;
+    /** Intereses elegidos (hasta 20). Las experiencias se etiquetan con los mismos: así el back recomienda ("Para vos"). */
+    @ManyToMany(fetch = FetchType.EAGER)
+    @JoinTable(name = "user_interest",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "interest_id"))
+    @OrderBy("name ASC")
+    private Set<Interest> interests;
 
     @OneToMany(mappedBy = "user")
     private List<Order> orders;
@@ -97,7 +101,14 @@ public class User implements UserDetails {
     @Builder.Default
     private boolean active = true;
 
-    // El código de "Olvidé mi contraseña" vive en su propia tabla: ver PasswordResetCode.
+    // ¿Confirmó que el email es suyo (con el código que le mandamos al registrarse)? Sin eso no puede iniciar sesión.
+    // En Java arranca en false (cuenta nueva). El "default true" de la base es solo para las cuentas que ya existían
+    // cuando se agregó la columna: esas quedan verificadas y pueden seguir entrando.
+    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Builder.Default
+    private boolean emailVerified = false;
+
+    // Los códigos de verificación y de "Olvidé mi contraseña" viven en su propia tabla: ver VerificationCode.
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

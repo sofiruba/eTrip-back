@@ -5,7 +5,6 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -15,16 +14,21 @@ import org.springframework.transaction.annotation.Transactional;
 import com.uade.tpo.demo.controllers.auth.AuthenticationRequest;
 import com.uade.tpo.demo.controllers.auth.AuthenticationResponse;
 import com.uade.tpo.demo.controllers.auth.AvailabilityResponse;
-import com.uade.tpo.demo.controllers.auth.ForgotPasswordResponse;
-import com.uade.tpo.demo.controllers.auth.ResetPasswordRequest;
 import com.uade.tpo.demo.controllers.auth.RegisterRequest;
+import com.uade.tpo.demo.controllers.auth.RegisterResponse;
+import com.uade.tpo.demo.controllers.auth.ResetPasswordRequest;
+import com.uade.tpo.demo.controllers.auth.VerifyEmailRequest;
 import com.uade.tpo.demo.controllers.config.JwtService;
-import com.uade.tpo.demo.entity.PasswordResetCode;
+import com.uade.tpo.demo.entity.Booking;
+import com.uade.tpo.demo.entity.CodePurpose;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
+import com.uade.tpo.demo.entity.VerificationCode;
 import com.uade.tpo.demo.exceptions.BadRequestException;
+import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
-import com.uade.tpo.demo.repository.PasswordResetCodeRepository;
+import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.VerificationCodeRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.impl.UserServiceImpl;
 
@@ -33,26 +37,29 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class AuthenticationService {
-    private static final int RESET_CODE_MINUTES = 15;
-    private static final int RESET_CODE_MAX_ATTEMPTS = 5;
+    private static final int CODE_MINUTES = 15;
+    private static final int CODE_MAX_ATTEMPTS = 5;
+    // No mandamos otro mail con código a la misma cuenta hasta que pase este tiempo
+    private static final int RESEND_SECONDS = 60;
     private static final String INVALID_CODE = "El código no es válido o ya venció. Pedí uno nuevo.";
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final UserRepository repository;
-    private final PasswordResetCodeRepository resetCodeRepository;
+    private final VerificationCodeRepository codeRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthenticationManager authenticationManager;
-    private final PasswordResetSender passwordResetSender;
+    private final MailService mailService;
+    private final InterestService interestService;
+    private final BookingRepository bookingRepository;
+    private final NotificationService notificationService;
 
-    // true solo en desarrollo: la respuesta de /forgot-password incluye el código (no hay mail todavía)
-    @Value("${app.password-reset.show-code:false}")
-    private boolean showResetCode;
-
-    // Crea un usuario nuevo (siempre CLIENTE; los ADMIN se dan de alta a mano en la base)
-    // y devuelve el token de una vez, sin exigir un login aparte.
-    public AuthenticationResponse register(RegisterRequest request) throws BadRequestException {
+    // Crea un usuario nuevo (siempre CLIENTE; los ADMIN se dan de alta a mano en la base) SIN verificar y le manda
+    // por mail un código para confirmar que el email es suyo. Todavía no devuelve token: eso lo hace verifyEmail.
+    // Si el mail no se puede mandar, la transacción se deshace y la cuenta no queda creada.
+    @Transactional
+    public RegisterResponse register(RegisterRequest request) throws BadRequestException {
         String username = trimToNull(request.getUsername());
         String email = trimToNull(request.getEmail());
         if (username == null || email == null || trimToNull(request.getPassword()) == null
@@ -88,19 +95,24 @@ public class AuthenticationService {
                 .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .role(Role.CLIENTE)
-                .interests(request.getInterests() != null ? UserServiceImpl.cleanInterests(request.getInterests()) : null)
+                .interests(interestService.resolve(request.getInterests(), UserServiceImpl.MAX_INTERESTS))
+                .emailVerified(false)
                 .build();
 
         repository.save(user);
-        var jwtToken = jwtService.generateToken(user);
-        return AuthenticationResponse.builder()
-                .accessToken(jwtToken)
+        sendCode(user, CodePurpose.VERIFY_EMAIL);
+        return RegisterResponse.builder()
+                .email(user.getEmail())
                 .build();
     }
 
     // Login con email o username + password; delega la validación de la password en
     // Spring Security y devuelve un token JWT nuevo.
-    public AuthenticationResponse authenticate(AuthenticationRequest request) {
+    // Si la contraseña es correcta pero el email no está verificado, no hay token: le mandamos un código
+    // y respondemos 403 (el front pasa a la pantalla de verificar el email).
+    // ForbiddenException es checked: no deshace la transacción, así el código nuevo queda guardado.
+    @Transactional
+    public AuthenticationResponse authenticate(AuthenticationRequest request) throws ForbiddenException {
         String identifier = request.getUsernameOrEmail();
         String email = repository.findByEmail(identifier)
                 .map(User::getEmail)
@@ -114,6 +126,10 @@ public class AuthenticationService {
 
         var user = repository.findByEmail(email)
                 .orElseThrow();
+        if (!user.isEmailVerified()) {
+            sendCode(user, CodePurpose.VERIFY_EMAIL);
+            throw new ForbiddenException("Todavía no verificaste tu email. Te mandamos un código para hacerlo.");
+        }
         var jwtToken = jwtService.generateToken(user);
         return AuthenticationResponse.builder()
                 .accessToken(jwtToken)
@@ -131,75 +147,130 @@ public class AuthenticationService {
                 .build();
     }
 
-    // Genera un código de 6 dígitos y se lo manda al usuario (ver PasswordResetSender).
-    // Pedirlo otra vez genera uno nuevo y anula el anterior (un solo código pendiente por usuario).
+    // Confirma el email con el código del mail y deja la sesión iniciada (devuelve el token).
     @Transactional
-    public ForgotPasswordResponse forgotPassword(String usernameOrEmail)
-            throws BadRequestException, ResourceNotFoundException {
+    public AuthenticationResponse verifyEmail(VerifyEmailRequest request) throws BadRequestException {
+        User user = checkCode(request.getUsernameOrEmail(), request.getCode(), CodePurpose.VERIFY_EMAIL);
+        user.setEmailVerified(true);
+        repository.save(user);
+        claimGifts(user);
+        codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL);
+        return AuthenticationResponse.builder()
+                .accessToken(jwtService.generateToken(user))
+                .build();
+    }
+
+    // "Reenviar código" de la verificación. Si la cuenta no existe o ya está verificada no hace nada
+    // (no le contamos a nadie qué cuentas existen ni cuáles están verificadas).
+    @Transactional
+    public void resendVerification(String usernameOrEmail) {
+        findUser(usernameOrEmail)
+                .filter(user -> !user.isEmailVerified() && user.isActive())
+                .ifPresent(user -> sendCode(user, CodePurpose.VERIFY_EMAIL));
+    }
+
+    // Le manda al usuario un código para cambiar la contraseña.
+    @Transactional
+    public void forgotPassword(String usernameOrEmail) throws BadRequestException, ResourceNotFoundException {
         User user = findUser(usernameOrEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("No encontramos una cuenta con ese email o usuario"));
         if (!user.isActive()) {
             throw new BadRequestException("Esta cuenta está desactivada. Pedile a un administrador que la reactive.");
         }
-        String code = String.format("%06d", RANDOM.nextInt(1_000_000));
-        // Si había uno pendiente lo reutilizamos (user_id es único) con el código nuevo y los intentos en cero
-        PasswordResetCode resetCode = resetCodeRepository.findByUserId(user.getId())
-                .orElseGet(() -> PasswordResetCode.builder().user(user).build());
-        resetCode.setCodeHash(passwordEncoder.encode(code));
-        resetCode.setExpiresAt(LocalDateTime.now().plusMinutes(RESET_CODE_MINUTES));
-        resetCode.setAttempts(0);
-        resetCodeRepository.save(resetCode);
-        passwordResetSender.send(user, code);
-        // A una cuenta ADMIN nunca se le devuelve el código en la respuesta (solo sale por la consola del back):
-        // si no, cualquiera que sepa el usuario de un admin podría cambiarle la contraseña.
-        boolean exposeCode = showResetCode && user.getRole() != Role.ADMIN;
-        return ForgotPasswordResponse.builder()
-                .devCode(exposeCode ? code : null)
-                .build();
+        sendCode(user, CodePurpose.RESET_PASSWORD);
     }
 
     // Revisa el código sin cambiar la contraseña (el front lo usa para pasar al paso de la contraseña nueva).
     // Un intento fallido sí se cuenta: BadRequestException es checked, así que no deshace la transacción.
     @Transactional
     public void verifyResetCode(ResetPasswordRequest request) throws BadRequestException {
-        checkResetCode(request);
+        checkCode(request.getUsernameOrEmail(), request.getCode(), CodePurpose.RESET_PASSWORD);
     }
 
     // Cambia la contraseña si el código es correcto, borra el código y deja al usuario logueado.
+    // Como el código llegó a su mail, también queda probado que el email es suyo: la cuenta queda verificada.
     @Transactional
     public AuthenticationResponse resetPassword(ResetPasswordRequest request) throws BadRequestException {
-        User user = checkResetCode(request);
+        User user = checkCode(request.getUsernameOrEmail(), request.getCode(), CodePurpose.RESET_PASSWORD);
         String newPassword = request.getNewPassword();
         if (newPassword == null || newPassword.trim().length() < 6) {
             throw new BadRequestException("La contraseña debe tener al menos 6 caracteres");
         }
         user.setPassword(passwordEncoder.encode(newPassword));
+        boolean wasVerified = user.isEmailVerified();
+        user.setEmailVerified(true);
         repository.save(user);
-        resetCodeRepository.deleteByUserId(user.getId());
+        if (!wasVerified) {
+            claimGifts(user);
+        }
+        codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.RESET_PASSWORD);
+        codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL);
         return AuthenticationResponse.builder()
                 .accessToken(jwtService.generateToken(user))
                 .build();
     }
 
+    // Regalos que le hicieron a este email antes de que tuviera cuenta: ahora que probó que el email es suyo
+    // (verificándolo), pasan a ser suyos y los ve en "Mis reservas".
+    private void claimGifts(User user) {
+        int claimed = 0;
+        for (Booking booking : bookingRepository.findByRecipientIsNullAndOrder_GiftRecipientEmailIgnoreCase(user.getEmail())) {
+            if (!booking.isRefunded() && !booking.getOrder().getUser().getId().equals(user.getId())) {
+                booking.setRecipient(user);
+                bookingRepository.save(booking);
+                claimed++;
+            }
+        }
+        if (claimed > 0) {
+            notificationService.create(user, "¡Tenés un regalo esperándote!",
+                    "Te regalaron " + (claimed == 1 ? "una experiencia" : claimed + " experiencias") + ". Ya está en tus reservas, con el voucher.");
+        }
+    }
+
+    // Genera un código de 6 dígitos, guarda su hash y lo manda por mail.
+    // Pedirlo otra vez genera uno nuevo y anula el anterior (un solo código pendiente de cada tipo por usuario).
+    // Si el último se mandó hace menos de un minuto no mandamos otro (sigue valiendo el anterior):
+    // así nadie puede usar PLAN para llenar de mails una casilla.
+    private void sendCode(User user, CodePurpose purpose) {
+        LocalDateTime now = LocalDateTime.now();
+        VerificationCode verificationCode = codeRepository.findByUserIdAndPurpose(user.getId(), purpose)
+                .orElseGet(() -> VerificationCode.builder().user(user).purpose(purpose).build());
+        if (verificationCode.getSentAt() != null && verificationCode.getExpiresAt().isAfter(now)
+                && verificationCode.getSentAt().plusSeconds(RESEND_SECONDS).isAfter(now)) {
+            return;
+        }
+        String code = String.format("%06d", RANDOM.nextInt(1_000_000));
+        verificationCode.setCodeHash(passwordEncoder.encode(code));
+        verificationCode.setExpiresAt(now.plusMinutes(CODE_MINUTES));
+        verificationCode.setSentAt(now);
+        verificationCode.setAttempts(0);
+        codeRepository.save(verificationCode);
+        if (purpose == CodePurpose.VERIFY_EMAIL) {
+            mailService.sendVerificationCode(user, code, CODE_MINUTES);
+        } else {
+            mailService.sendPasswordResetCode(user, code, CODE_MINUTES);
+        }
+    }
+
     // Devuelve el usuario si el código es válido. Cada intento fallido suma uno; al llegar
     // al máximo (o si ya venció) el código se borra y hay que pedir otro.
-    private User checkResetCode(ResetPasswordRequest request) throws BadRequestException {
-        User user = findUser(request.getUsernameOrEmail()).orElseThrow(() -> new BadRequestException(INVALID_CODE));
-        PasswordResetCode resetCode = resetCodeRepository.findByUserId(user.getId())
+    private User checkCode(String usernameOrEmail, String rawCode, CodePurpose purpose) throws BadRequestException {
+        User user = findUser(usernameOrEmail).orElseThrow(() -> new BadRequestException(INVALID_CODE));
+        VerificationCode verificationCode = codeRepository.findByUserIdAndPurpose(user.getId(), purpose)
                 .orElseThrow(() -> new BadRequestException(INVALID_CODE));
-        if (resetCode.getExpiresAt().isBefore(LocalDateTime.now())) {
-            resetCodeRepository.delete(resetCode);
+        if (verificationCode.getExpiresAt().isBefore(LocalDateTime.now())) {
+            codeRepository.delete(verificationCode);
             throw new BadRequestException(INVALID_CODE);
         }
-        String code = trimToNull(request.getCode());
-        if (code == null || !passwordEncoder.matches(code, resetCode.getCodeHash())) {
-            int attempts = resetCode.getAttempts() + 1;
-            if (attempts >= RESET_CODE_MAX_ATTEMPTS) {
-                resetCodeRepository.delete(resetCode);
+        String code = trimToNull(rawCode);
+        if (code == null || !passwordEncoder.matches(code, verificationCode.getCodeHash())) {
+            int attempts = verificationCode.getAttempts() + 1;
+            if (attempts >= CODE_MAX_ATTEMPTS) {
+                codeRepository.delete(verificationCode);
                 throw new BadRequestException("Hubo demasiados intentos. Pedí un código nuevo.");
             }
-            resetCode.setAttempts(attempts);
-            resetCodeRepository.save(resetCode);
+            verificationCode.setAttempts(attempts);
+            codeRepository.save(verificationCode);
             throw new BadRequestException("El código no es correcto");
         }
         return user;

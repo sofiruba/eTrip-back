@@ -76,7 +76,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
         return toResponse(experienceCategoryRepository.save(category));
     }
 
-    // Borra una categoría; falla si todavía tiene experiencias asociadas.
+    // Borra una categoría; falla si todavía tiene experiencias o intereses asociados.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteCategory(Long categoryId) throws ResourceNotFoundException, BadRequestException {
@@ -87,6 +87,11 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
             throw new BadRequestException(
                     "No se puede borrar la categoria \"" + category.getName()
                             + "\" porque tiene experiencias asociadas");
+        }
+        if (category.getInterests() != null && !category.getInterests().isEmpty()) {
+            throw new BadRequestException(
+                    "No se puede borrar la categoria \"" + category.getName()
+                            + "\" porque tiene intereses asociados. Pasalos a otra categoría o borralos primero");
         }
 
         experienceCategoryRepository.delete(category);

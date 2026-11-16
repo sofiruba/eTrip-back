@@ -8,6 +8,7 @@ import org.springframework.data.domain.Pageable;
 
 import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
+import com.uade.tpo.demo.dtos.response.HostAgendaItemDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -21,6 +22,9 @@ public interface ExperienceSessionService {
 
     // Fechas que gestiona el usuario (ADMIN: todas; anfitrión: las suyas), incluidas pasadas y canceladas.
     List<ExperienceSessionResponseDTO> getManagedSessions(User currentUser);
+
+    // "Fechas y huéspedes": un resumen por cada experiencia del anfitrión
+    List<HostAgendaItemDTO> getHostAgenda(User currentUser);
 
     // Un turno puntual por id.
     ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException;

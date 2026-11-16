@@ -75,12 +75,15 @@ Notas:
    ```
 3. Ajustar usuario/contraseña en
    [`src/main/resources/application.properties`](src/main/resources/application.properties), o
-   sobreescribir con variables de entorno `DB_USER` / `DB_PASSWORD`.
-4. Levantar:
+   sobreescribir con variables de entorno `DB_USER` / `DB_PASSWORD` (también se pueden poner en `.env`).
+4. **Mails:** copiar `.env.example` como `.env` y completar `MAIL_PASSWORD` con la contraseña de aplicación de
+   `equipodeplan@gmail.com`. `.env` está en `.gitignore`: la clave nunca se sube. Sin `.env`, los códigos de
+   verificación y de recuperar contraseña se escriben en la consola del back.
+5. Levantar:
    ```bash
    ./mvnw spring-boot:run
    ```
-5. API en `http://localhost:4002`. Hibernate crea/actualiza las tablas al arrancar
+6. API en `http://localhost:4002`. Hibernate crea/actualiza las tablas al arrancar
    (`spring.jpa.hibernate.ddl-auto=update`).
 
 ### Cargar datos de ejemplo (borra todo)
@@ -109,18 +112,23 @@ Sin el flag no hace nada: se puede borrar la clase cuando ya no haga falta.
 ### Autenticación
 
 ```bash
-# Registro
+# Registro → { "email": "ana@test.com" } (sin token: llega un código de 6 dígitos al email)
 curl -X POST http://localhost:4002/api/v1/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"username":"anap","firstname":"Ana","lastname":"Perez","email":"ana@test.com","password":"pass1234"}'
 
-# Login (usernameOrEmail acepta username o email)
+# Verificar el email con el código del mail
+curl -X POST http://localhost:4002/api/v1/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"usernameOrEmail":"ana@test.com","code":"123456"}'
+
+# Login (usernameOrEmail acepta username o email). 403 si el email no está verificado
 curl -X POST http://localhost:4002/api/v1/auth/authenticate \
   -H 'Content-Type: application/json' \
   -d '{"usernameOrEmail":"ana@test.com","password":"pass1234"}'
 ```
 
-Ambos devuelven `{ "access_token": "<JWT>" }`. Ese token va en el header
+`verify-email` y `authenticate` devuelven `{ "access_token": "<JWT>" }`. Ese token va en el header
 `Authorization: Bearer <JWT>` en el resto de los endpoints. `register` siempre crea rol
 `CLIENTE`. Para tener un `ADMIN`: `UPDATE user SET role='ADMIN' WHERE email=...` en MySQL, o
 que otro ADMIN use `PATCH /users/{id}/role`.
@@ -130,7 +138,8 @@ que otro ADMIN use `PATCH /users/{id}/role`.
 | Archivo | Rol |
 |---|---|
 | `JwtService` | Genera y valida el JWT (HMAC-SHA, expira a las 24hs). |
-| `AuthenticationService` | `register`/`authenticate`: valida datos, encripta password (BCrypt), pide el token. |
+| `AuthenticationService` | `register`/`authenticate`/`verifyEmail`: valida datos, encripta password (BCrypt), manda y revisa los códigos (`VerificationCode`), pide el token. |
+| `MailService` | Manda los mails con el código (Gmail, `JavaMailSender`). |
 | `ApplicationConfig` | `UserDetailsService`, `AuthenticationProvider`, `PasswordEncoder`. |
 | `JwtAuthenticationFilter` | Corre en cada request: valida el token y carga el usuario en el `SecurityContext`. |
 | `SecurityConfig` | Rutas públicas y rol requerido por ruta. |
@@ -359,8 +368,7 @@ experiencia antes; autor sale del token.
 
 - Sin tests automatizados.
 - No hay chequeo `publisher != buyer` en carrito/checkout.
-- Sin recuperación/cambio de contraseña ni baja de cuenta.
-- Sin CORS configurado.
+- Sin baja de cuenta.
 - Sin Swagger/OpenAPI.
 
 ## Cambios recientes para el frontend

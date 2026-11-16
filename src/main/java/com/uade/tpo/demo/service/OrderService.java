@@ -29,4 +29,12 @@ public interface OrderService {
     // Cancela la orden: reembolsa todas sus reservas que todavía no empezaron; solo ADMIN.
     OrderResponseDTO cancelOrder(Long orderId, User user)
             throws ResourceNotFoundException, ForbiddenException, BadRequestException;
+
+    // Regalo pendiente: quien pagó corrige el email (se vuelve a mandar la invitación)
+    OrderResponseDTO updateGiftEmail(Long orderId, String recipientEmail, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
+
+    // Regalo pendiente: quien pagó se lo queda (pasan a ser reservas comunes suyas)
+    OrderResponseDTO cancelGift(Long orderId, User user)
+            throws ResourceNotFoundException, ForbiddenException, BadRequestException;
 }

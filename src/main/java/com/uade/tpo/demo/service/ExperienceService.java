@@ -12,6 +12,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
+import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -25,6 +26,9 @@ public interface ExperienceService {
 
     // Una experiencia puntual por id (una pausada solo la ven su anfitrión y los administradores).
     ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser) throws ResourceNotFoundException;
+
+    // "Para vos": recomendaciones según intereses, guardadas, reservas y vistas (viewedIds lo manda el front)
+    List<RecommendationResponseDTO> recommend(User currentUser, List<Long> viewedIds);
 
     // Crea una experiencia nueva con sus fotos.
     ExperienceResponseDTO createExperience(ExperienceRequestDTO request, List<MultipartFile> images, Long publisherId)

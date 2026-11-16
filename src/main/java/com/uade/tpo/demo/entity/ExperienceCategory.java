@@ -39,4 +39,8 @@ public class ExperienceCategory {
 
     @OneToMany(mappedBy = "category")
     private List<Experience> experiences;
+
+    // Intereses que se agrupan en esta categoría
+    @OneToMany(mappedBy = "category")
+    private List<Interest> interests;
 }

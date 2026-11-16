@@ -211,9 +211,19 @@ public class BookingServiceImpl implements BookingService {
             dto.setGiftRecipientName(order.getGiftRecipientName());
             dto.setGiftMessage(order.getGiftMessage());
             dto.setGiftFromName(dto.getBuyerName());
+            dto.setGiftStatus(giftStatus(order, booking));
         }
         dto.setRecipientId(booking.getRecipient() != null ? booking.getRecipient().getId() : null);
         return dto;
+    }
+
+    // Estado del regalo de una reserva: ya tiene dueño (DELIVERED), espera a que quien lo recibe tenga cuenta
+    // verificada con ese email (PENDING) o no tiene email y se entrega en mano (IN_PERSON).
+    static String giftStatus(Order order, Booking booking) {
+        if (booking.getRecipient() != null) {
+            return "DELIVERED";
+        }
+        return order.getGiftRecipientEmail() != null ? "PENDING" : "IN_PERSON";
     }
 
     // El precio que se pagó (guardado al comprar). Las reservas anteriores a ese campo usan el precio actual.
