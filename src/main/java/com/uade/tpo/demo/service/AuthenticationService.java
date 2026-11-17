@@ -78,24 +78,27 @@ public class AuthenticationService {
         if (request.getFirstname().trim().length() > 100 || request.getLastname().trim().length() > 100) {
             throw new BadRequestException("El nombre y el apellido pueden tener hasta 100 caracteres");
         }
-        if (repository.existsByDisplayUsername(username)) {
-            throw new BadRequestException("Ese nombre de usuario ya está en uso");
-        }
-        if (repository.existsByEmail(email)) {
+        // Una cuenta sin verificar no bloquea nada: si es del mismo email, se reemplazan sus datos (sin el código
+        // del mail nadie entra igual); si tiene el mismo usuario y quedó abandonada, se libera
+        User existing = repository.findByEmail(email).orElse(null);
+        if (existing != null && existing.isEmailVerified()) {
             throw new BadRequestException("Ya hay una cuenta con ese email");
         }
+        User sameUsername = repository.findByDisplayUsername(username).orElse(null);
+        if (sameUsername != null && (existing == null || !sameUsername.getId().equals(existing.getId()))) {
+            if (!isAbandoned(sameUsername)) {
+                throw new BadRequestException("Ese nombre de usuario ya está en uso");
+            }
+            deleteAbandoned(sameUsername);
+        }
 
-        var user = User.builder()
-                .displayUsername(username)
-                .firstName(request.getFirstname().trim())
-                .lastName(request.getLastname().trim())
-                .email(email)
-                .password(passwordEncoder.encode(request.getPassword()))
-                .role(Role.CLIENTE)
-                .interests(interestService.resolve(request.getInterests(), UserServiceImpl.MAX_INTERESTS))
-                .emailVerified(false)
-                .build();
-
+        User user = existing != null ? existing
+                : User.builder().email(email).role(Role.CLIENTE).emailVerified(false).build();
+        user.setDisplayUsername(username);
+        user.setFirstName(request.getFirstname().trim());
+        user.setLastName(request.getLastname().trim());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setInterests(interestService.resolve(request.getInterests(), UserServiceImpl.MAX_INTERESTS));
         repository.save(user);
         sendCode(user, CodePurpose.VERIFY_EMAIL);
         return RegisterResponse.builder()
@@ -138,10 +141,34 @@ public class AuthenticationService {
     public AvailabilityResponse checkAvailability(String username, String email) {
         String cleanUsername = trimToNull(username);
         String cleanEmail = trimToNull(email);
+        // Con las mismas reglas que el registro: una cuenta sin verificar con ese email no lo ocupa, y un usuario
+        // está libre si nadie lo tiene, si es de una cuenta abandonada o de la cuenta sin verificar con este email
+        Boolean usernameAvailable = cleanUsername == null ? null
+                : repository.findByDisplayUsername(cleanUsername)
+                        .map(owner -> isAbandoned(owner) || (!owner.isEmailVerified() && owner.getEmail().equals(cleanEmail)))
+                        .orElse(true);
+        Boolean emailAvailable = cleanEmail == null ? null
+                : repository.findByEmail(cleanEmail).map(owner -> !owner.isEmailVerified()).orElse(true);
         return AvailabilityResponse.builder()
-                .usernameAvailable(cleanUsername == null ? null : !repository.existsByDisplayUsername(cleanUsername))
-                .emailAvailable(cleanEmail == null ? null : !repository.existsByEmail(cleanEmail))
+                .usernameAvailable(usernameAvailable)
+                .emailAvailable(emailAvailable)
                 .build();
+    }
+
+    // Una cuenta que nunca se verificó y cuyo código ya venció: nadie la va a poder usar (no tiene sesión ni datos)
+    private boolean isAbandoned(User user) {
+        return !user.isEmailVerified() && codeRepository.findByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL)
+                .map(code -> code.getExpiresAt().isBefore(LocalDateTime.now()))
+                .orElse(true);
+    }
+
+    // Borra una cuenta abandonada para liberar su nombre de usuario. flush: que se borre antes de guardar la nueva
+    // (si no, Hibernate inserta primero y choca con el usuario único)
+    private void deleteAbandoned(User user) {
+        codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL);
+        codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.RESET_PASSWORD);
+        repository.delete(user);
+        repository.flush();
     }
 
     // Confirma el email con el código del mail y deja la sesión iniciada (devuelve el token).
