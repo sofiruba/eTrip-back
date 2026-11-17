@@ -47,7 +47,8 @@ Todas las cuentas del seed ya tienen el email verificado.
 ## Seguridad
 
 - **Registro con verificación del email:** la cuenta queda sin verificar y llega un código de 6 dígitos al mail. Sin
-  verificarlo no se puede iniciar sesión (el login responde 403 y manda un código nuevo).
+  verificarlo no se puede iniciar sesión (el login responde 403 y manda un código nuevo). Una cuenta sin verificar
+  no bloquea su email ni su usuario: si alguien escribió mal su mail, se puede volver a registrar.
 - **Recuperar contraseña** con un código por mail. Los códigos se guardan hasheados (como la contraseña), vencen a
   los 15 minutos, se invalidan con 5 intentos fallidos y no se manda más de un mail por minuto a la misma cuenta.
 - **JWT** (24 h) en el header `Authorization: Bearer …`. El rol no viaja en el token: se lee de la base en cada
