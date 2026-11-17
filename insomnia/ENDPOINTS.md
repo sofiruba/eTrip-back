@@ -34,7 +34,8 @@ los pedidos los usan solos. Hay logins listos para la compradora de demo, un anf
 | POST | `/reset-password` | `{ usernameOrEmail, code, newPassword }` → `{ access_token }`. También deja el email verificado |
 
 Reglas: usuario sin `@` (≤ 50), email válido y único, contraseña ≥ 6, nombre y apellido ≤ 100, intereses existentes
-(≤ 20). Los códigos vencen a los 15 min, se invalidan con 5 intentos y no se manda otro mail antes de 1 min.
+(≤ 20). Una cuenta sin verificar no ocupa nada: registrarse otra vez con su email reemplaza sus datos y manda un código
+nuevo, y su nombre de usuario se libera cuando su código vence. Los códigos vencen a los 15 min, se invalidan con 5 intentos y no se manda otro mail antes de 1 min.
 
 ## 2. Usuarios — `/users`
 
