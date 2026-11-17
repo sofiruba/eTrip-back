@@ -12,12 +12,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
@@ -43,9 +44,8 @@ public class Booking {
     /**
      * Precio por persona que se pagó (con el descuento de la experiencia, sin el cupón). Se guarda al comprar
      * para que editar el precio después no cambie el voucher, los reembolsos ni las estadísticas.
-     * Null en reservas viejas (anteriores a este campo): ahí se usa el precio actual.
      */
-    @Column(precision = 19, scale = 2)
+    @Column(nullable = false, precision = 19, scale = 2)
     private BigDecimal unitPrice;
 
     @Column
@@ -67,8 +67,8 @@ public class Booking {
     private ExperienceSession experienceSession;
 
     /**
-     * Si la compra fue un regalo y el destinatario tiene cuenta en PLAN: la reserva también aparece en sus reservas
-     * (puede ver el voucher y reseñar). El dinero y el reembolso siguen siendo de quien compró (order.user).
+     * A quién se le entregó el regalo (una cuenta verificada con el email que puso quien compró). Desde ese momento
+     * el voucher es suyo: lo ve, lo puede cancelar y reseña la experiencia. El dinero siempre vuelve a quien pagó.
      */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipient_user_id")

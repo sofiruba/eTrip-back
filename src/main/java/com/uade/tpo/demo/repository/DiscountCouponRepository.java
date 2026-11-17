@@ -8,9 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import jakarta.persistence.LockModeType;
-
 import com.uade.tpo.demo.entity.DiscountCoupon;
+
+import jakarta.persistence.LockModeType;
 
 @Repository
 public interface DiscountCouponRepository extends JpaRepository<DiscountCoupon, Long> {

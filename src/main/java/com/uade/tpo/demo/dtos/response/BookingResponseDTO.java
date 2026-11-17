@@ -30,14 +30,14 @@ public class BookingResponseDTO {
     private LocalDateTime refundedAt;
 
     /**
-     * Plata de la reserva (en 0 si se reembolsó): lo que pagó el comprador (con el cupón repartido),
-     * la comisión de PLAN y lo que le queda al anfitrión. La comisión está incluida en el precio.
+     * Plata de la reserva (en 0 si se canceló): lo que pagó el comprador (con el cupón repartido), lo que recibe
+     * el anfitrión (precio de lista menos el 10 %: los cupones los absorbe PLAN) y lo que le queda a PLAN.
      */
     private BigDecimal paidAmount;
     private BigDecimal commission;
     private BigDecimal hostEarnings;
 
-    /** Quien hizo la reserva. Util sobre todo para la vista de vendedor (/bookings/sales). */
+    /** Quien hizo la reserva (lo usa sobre todo el anfitrión en /bookings/sales). */
     private Long buyerId;
     private String buyerName;
     /** Si la compra fue un regalo: para quién, la dedicatoria y quién lo regala. */
@@ -46,6 +46,13 @@ public class BookingResponseDTO {
     private String giftFromName;
     /** Si es un regalo: PENDING (esperando que quien lo recibe tenga cuenta verificada con ese email), DELIVERED (ya es suyo) o IN_PERSON (sin email: se entrega en mano). */
     private String giftStatus;
-    /** El usuario que recibió el regalo (si tiene cuenta). */
+    /** El usuario al que se le entregó el regalo. */
     private Long recipientId;
+
+    /** Si quien la mira la puede cancelar con reembolso ahora, y hasta cuándo (null si no puede). */
+    private boolean refundable;
+    private LocalDateTime refundableUntil;
+
+    /** Si quien la mira la puede reseñar: tiene el voucher, no se canceló y la experiencia ya terminó. */
+    private boolean reviewable;
 }

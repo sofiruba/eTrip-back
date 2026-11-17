@@ -24,8 +24,9 @@ public final class ExperienceSessionSpecifications {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             predicates.add(cb.isTrue(root.get("active")));
-            predicates.add(cb.greaterThanOrEqualTo(root.get("startsAt"), java.time.LocalDateTime.now()));
+            predicates.add(cb.greaterThanOrEqualTo(root.get("startsAt"), LocalDateTime.now()));
             predicates.add(cb.isTrue(root.get("experience").get("active")));
+            predicates.add(cb.isTrue(root.get("experience").get("publisher").get("active")));
 
             if (experienceId != null) {
                 predicates.add(cb.equal(root.get("experience").get("id"), experienceId));

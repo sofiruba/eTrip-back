@@ -5,9 +5,9 @@ import org.springframework.data.domain.Pageable;
 
 import com.uade.tpo.demo.dtos.response.BookingResponseDTO;
 import com.uade.tpo.demo.entity.User;
+import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
-import com.uade.tpo.demo.exceptions.BadRequestException;
 
 public interface BookingService {
     // Mis vouchers; ADMIN ve los de todos.

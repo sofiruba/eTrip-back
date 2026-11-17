@@ -1,17 +1,18 @@
 package com.uade.tpo.demo.service.impl;
 
+import java.util.Base64;
+import java.util.Collection;
+import java.util.List;
+
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Base64;
-import java.util.List;
-
 import com.uade.tpo.demo.dtos.request.UserUpdateDTO;
 import com.uade.tpo.demo.dtos.response.UserResponseDTO;
-import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.Interest;
+import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -21,6 +22,7 @@ import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.InterestService;
+import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.UserService;
 
 import lombok.RequiredArgsConstructor;
@@ -37,6 +39,7 @@ public class UserServiceImpl implements UserService {
     private final OrderRepository orderRepository;
     private final ReviewRepository reviewRepository;
     private final InterestService interestService;
+    private final OrderService orderService;
 
     // Mi perfil completo + contadores. El usuario sale del token, no de la URL.
     @Override
@@ -48,7 +51,7 @@ public class UserServiceImpl implements UserService {
     }
 
     // Edita mi perfil: nombre y apellido, y lo público (presentación, ciudad, foto, intereses).
-    // Un campo que no viene se deja como está; un texto vacío lo borra.
+    // Un campo que no viene se deja como está; en presentación, ciudad y foto, un texto vacío lo borra.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public UserResponseDTO updateMyProfile(User currentUser, UserUpdateDTO request) throws BadRequestException {
@@ -92,7 +95,7 @@ public class UserServiceImpl implements UserService {
     }
 
     // Foto de perfil: viene como data URL ("data:image/jpeg;base64,...") o base64 pelado; vacío = sin foto.
-    // El front la achica a 320 px antes de mandarla; igual se pone un tope.
+    // Tope de tamaño de la foto de perfil (el front ya la achica antes de mandarla).
     private byte[] decodeAvatar(String value) throws BadRequestException {
         String trimmed = value.trim();
         if (trimmed.isEmpty()) {
@@ -165,9 +168,14 @@ public class UserServiceImpl implements UserService {
         }
 
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("El usuario solicitado no existe"));
+                .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
         user.setActive(active);
-        return toResponse(userRepository.save(user), true);
+        User saved = userRepository.save(user);
+        // Si volvió a estar activa, recibe los regalos que le hicieron mientras tanto
+        if (active) {
+            orderService.claimPendingGifts(saved);
+        }
+        return toResponse(saved, true);
     }
 
     private Role parseRole(String role) throws BadRequestException {
@@ -218,7 +226,7 @@ public class UserServiceImpl implements UserService {
     }
 
     /** Nombres de los intereses, como los usa el front. */
-    public static List<String> interestNames(java.util.Collection<Interest> interests) {
+    public static List<String> interestNames(Collection<Interest> interests) {
         return interests == null ? List.of() : interests.stream().map(Interest::getName).toList();
     }
 }

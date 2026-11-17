@@ -79,8 +79,9 @@ public class DiscountCouponsController {
 
     // Borra el cupón si nunca se usó; si ya se usó en una orden, lo desactiva en vez de borrarlo.
     @DeleteMapping("/{couponId}")
-    public ResponseEntity<Void> deleteCoupon(@PathVariable Long couponId) throws ResourceNotFoundException {
-        discountCouponService.deleteCoupon(couponId);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<DiscountCouponResponseDTO> deleteCoupon(@PathVariable Long couponId) throws ResourceNotFoundException {
+        DiscountCouponResponseDTO deactivated = discountCouponService.deleteCoupon(couponId);
+        // 204: se borró. 200 con el cupón: ya se había usado, así que se desactivó en vez de borrarse
+        return deactivated == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(deactivated);
     }
 }

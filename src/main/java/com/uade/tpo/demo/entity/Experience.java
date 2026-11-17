@@ -3,7 +3,6 @@ package com.uade.tpo.demo.entity;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 
@@ -22,12 +21,13 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
@@ -113,16 +113,5 @@ public class Experience {
         }
         BigDecimal factor = BigDecimal.valueOf(100).subtract(discountPercentage);
         return price.multiply(factor).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-    }
-
-    @Transient
-    public byte[] getCoverImage() {
-        if (images == null || images.isEmpty()) {
-            return null;
-        }
-        return images.stream()
-                .min(Comparator.comparing(img -> img.getPosition() != null ? img.getPosition() : Integer.MAX_VALUE))
-                .map(ExperienceImage::getImage)
-                .orElse(null);
     }
 }

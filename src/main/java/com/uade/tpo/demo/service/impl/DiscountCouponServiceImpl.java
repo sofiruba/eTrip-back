@@ -44,7 +44,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
     @Transactional(readOnly = true)
     public DiscountCouponResponseDTO getCouponById(Long couponId) throws ResourceNotFoundException {
         return toResponse(discountCouponRepository.findById(couponId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe un cupon con id " + couponId)));
+                .orElseThrow(() -> new ResourceNotFoundException("El cupón no existe")));
     }
 
     static final String ALREADY_USED = "ALREADY_USED";
@@ -58,7 +58,7 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
         DiscountCoupon coupon = discountCouponRepository.findByCode(normalized).orElse(null);
 
         String reason = reasonIfInvalid(coupon);
-        if (reason == null && user != null && orderRepository.existsByUserIdAndDiscountCouponId(user.getId(), coupon.getId())) {
+        if (reason == null && user != null && orderRepository.hasUsedCoupon(user.getId(), coupon.getId())) {
             reason = ALREADY_USED;
         }
         // Montos con el carrito actual, para que el checkout muestre lo mismo que va a cobrar la orden
@@ -197,21 +197,19 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
         return toResponse(discountCouponRepository.save(coupon));
     }
 
-    // Borra el cupón si nunca se usó; si ya se usó en una orden, lo desactiva en vez de
-    // borrarlo, para no perder la integridad histórica de esas órdenes.
+    // Borra el cupón si nunca se usó (devuelve null). Si ya se usó, lo desactiva en vez de borrarlo, para no
+    // perder las órdenes que lo usaron, y devuelve el cupón desactivado.
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public void deleteCoupon(Long couponId) throws ResourceNotFoundException {
+    public DiscountCouponResponseDTO deleteCoupon(Long couponId) throws ResourceNotFoundException {
         DiscountCoupon coupon = discountCouponRepository.findById(couponId)
                 .orElseThrow(() -> new ResourceNotFoundException("El cupón no existe"));
-
         if (orderRepository.existsByDiscountCouponId(couponId)) {
             coupon.setActive(false);
-            discountCouponRepository.save(coupon);
-            return;
+            return toResponse(discountCouponRepository.save(coupon));
         }
-
         discountCouponRepository.delete(coupon);
+        return null;
     }
 
     private String requireCode(String code) throws BadRequestException {
@@ -244,6 +242,14 @@ public class DiscountCouponServiceImpl implements DiscountCouponService {
                 .validFrom(coupon.getValidFrom())
                 .validUntil(coupon.getValidUntil())
                 .active(coupon.getActive())
+                .status(statusOf(coupon))
+                .usedCount(orderRepository.countByDiscountCouponId(coupon.getId()))
                 .build();
+    }
+
+    // Estado del cupón hoy (el mismo criterio que se usa al pagar, sin la regla de "ya lo usaste")
+    private String statusOf(DiscountCoupon coupon) {
+        String reason = reasonIfInvalid(coupon);
+        return reason == null ? "ACTIVE" : "INVALID_PERCENTAGE".equals(reason) ? "INACTIVE" : reason;
     }
 }

@@ -28,5 +28,5 @@ public interface DiscountCouponService {
             throws ResourceNotFoundException, BadRequestException;
 
     // Borra el cupón, o lo desactiva si ya fue usado en una orden.
-    void deleteCoupon(Long couponId) throws ResourceNotFoundException;
+    DiscountCouponResponseDTO deleteCoupon(Long couponId) throws ResourceNotFoundException;
 }

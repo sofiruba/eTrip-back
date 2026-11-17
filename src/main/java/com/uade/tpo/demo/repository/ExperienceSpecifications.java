@@ -35,8 +35,9 @@ public final class ExperienceSpecifications {
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (!includeInactive) {
-                // Catálogo público: solo publicadas
+                // Catálogo público: solo publicadas y de anfitriones con la cuenta activa
                 predicates.add(cb.isTrue(root.get("active")));
+                predicates.add(cb.isTrue(root.get("publisher").get("active")));
             }
             if (!includeDeleted) {
                 // Las eliminadas por su anfitrión solo las ve el admin, como historial

@@ -13,12 +13,13 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Entity
 @Data
@@ -36,9 +37,6 @@ public class Order {
     private Long id;
 
     @Column
-    private Long count;
-
-    @Column
     private LocalDateTime createdAt;
 
     @Column
@@ -50,7 +48,7 @@ public class Order {
     @Column
     private BigDecimal total;
 
-    /** Compra como regalo: para quién es, su email (para avisarle si tiene cuenta) y una dedicatoria. */
+    /** Compra como regalo: para quién es, su email (se le entrega cuando tenga una cuenta verificada con ese email) y una dedicatoria. */
     @Column(name = "gift_recipient_name", length = 100)
     private String giftRecipientName;
 

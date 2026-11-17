@@ -3,11 +3,15 @@ package com.uade.tpo.demo.service.impl;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -15,12 +19,12 @@ import org.springframework.mail.MailException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.uade.tpo.demo.dtos.request.GiftRequestDTO;
 import com.uade.tpo.demo.dtos.request.OrderRequestDTO;
 import com.uade.tpo.demo.dtos.response.BookingResponseDTO;
 import com.uade.tpo.demo.dtos.response.OrderResponseDTO;
 import com.uade.tpo.demo.dtos.response.OrderStatsDTO;
 import com.uade.tpo.demo.entity.Booking;
-import com.uade.tpo.demo.entity.Cart;
 import com.uade.tpo.demo.entity.CartItem;
 import com.uade.tpo.demo.entity.DiscountCoupon;
 import com.uade.tpo.demo.entity.Experience;
@@ -38,14 +42,14 @@ import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.repository.UserRepository;
-import com.uade.tpo.demo.dtos.request.GiftRequestDTO;
-import com.uade.tpo.demo.service.OrderService;
 import com.uade.tpo.demo.service.BookingService;
-import com.uade.tpo.demo.service.NotificationService;
 import com.uade.tpo.demo.service.MailService;
+import com.uade.tpo.demo.service.NotificationService;
+import com.uade.tpo.demo.service.OrderService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -58,6 +62,7 @@ public class OrderServiceImpl implements OrderService {
     public static final BigDecimal PLAN_COMMISSION_RATE = new BigDecimal("0.10");
     /** Tarjeta de prueba que el "banco" simulado siempre rechaza. */
     private static final String DECLINED_TEST_CARD = "4000000000000002";
+    private static final DateTimeFormatter SESSION_DATE = DateTimeFormatter.ofPattern("EEE d/M 'a las' HH:mm", Locale.forLanguageTag("es-AR"));
 
     private final OrderRepository orderRepository;
     private final CartRepository cartRepository;
@@ -78,7 +83,7 @@ public class OrderServiceImpl implements OrderService {
         Page<Order> orders = isAdmin(user)
                 ? orderRepository.findAll(pageable)
                 : orderRepository.findByUserId(user.getId(), pageable);
-        return orders.map(this::toResponse);
+        return orders.map(order -> toResponse(order, user));
     }
 
     // Una orden puntual; solo el dueño o un ADMIN.
@@ -94,7 +99,7 @@ public class OrderServiceImpl implements OrderService {
             throw new ForbiddenException("No tenés acceso a esta orden");
         }
 
-        return toResponse(order);
+        return toResponse(order, user);
     }
 
     // Ventas, reembolsos y comisión de PLAN sobre todas las órdenes; solo ADMIN.
@@ -107,17 +112,18 @@ public class OrderServiceImpl implements OrderService {
         List<Order> orders = orderRepository.findAll();
         BigDecimal gross = BigDecimal.ZERO;
         BigDecimal refunded = BigDecimal.ZERO;
+        BigDecimal commission = BigDecimal.ZERO;
         for (Order order : orders) {
-            gross = gross.add(orZero(order.getTotal()));
+            gross = gross.add(order.getTotal());
             refunded = refunded.add(refundedAmount(order));
+            commission = commission.add(planCommission(order));
         }
-        BigDecimal net = gross.subtract(refunded);
         return OrderStatsDTO.builder()
                 .orderCount(orders.size())
                 .grossSales(gross)
                 .refunded(refunded)
-                .netSales(net)
-                .commission(commissionOf(net))
+                .netSales(gross.subtract(refunded))
+                .commission(commission)
                 .commissionRate(PLAN_COMMISSION_RATE.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP))
                 .build();
     }
@@ -146,7 +152,7 @@ public class OrderServiceImpl implements OrderService {
         if (refunded == 0) {
             throw new BadRequestException("Esta orden no tiene reservas para cancelar: ya se reembolsaron o ya pasaron");
         }
-        return toResponse(orderRepository.findById(orderId).orElseThrow());
+        return toResponse(orderRepository.findById(orderId).orElseThrow(), user);
     }
 
     // Estado de la orden según sus reservas: PAID, PARTIALLY_REFUNDED o CANCELLED.
@@ -159,98 +165,83 @@ public class OrderServiceImpl implements OrderService {
         return refundedCount == bookings.size() ? "CANCELLED" : "PARTIALLY_REFUNDED";
     }
 
-    // Confirma el carrito del usuario: valida cupos, aplica cupón si viene, genera un Booking
-    // (voucher) por cada item, descuenta los cupos y vacía el carrito, todo en una transacción.
+    // Confirma el carrito: valida el pago, el cupón, los lugares y el regalo, crea una reserva (voucher) por ítem,
+    // descuenta los lugares y vacía el carrito. Todo en una transacción: si algo falla, no se cobra nada.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public OrderResponseDTO createOrder(User user, OrderRequestDTO request)
-            throws ResourceNotFoundException, BadRequestException {
-        // Pago simulado: se valida antes de tocar cupos, así un rechazo no cambia nada.
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException {
+        if (user.getRole() == Role.ADMIN) {
+            throw new ForbiddenException("Las cuentas de administrador no pueden comprar experiencias");
+        }
+        // El pago se valida antes de tocar nada: un rechazo no cambia los lugares
         simulatePayment(request);
-
-        // Valida y resuelve el cupón del request (si viene) y que este usuario no lo haya usado ya en una orden anterior.
-        // Va primero porque bloquea el cupón: así el chequeo de "ya lo usaste" ve las compras que terminaron mientras esperaba.
+        // Va antes que los lugares porque bloquea el cupón: dos compras a la vez no lo pueden usar dos veces
         DiscountCoupon coupon = resolveCoupon(request, user);
+        GiftRequestDTO gift = cleanGift(request != null ? request.getGift() : null, user);
 
-        Cart cart = cartRepository.findByUserId(user.getId())
-                .orElseThrow(() -> new ResourceNotFoundException("No se puede confirmar una compra con el carrito vacío"));
-
-         // Valida que el carrito tenga items; si no, lanza excepción.
-        List<CartItem> items = cart.getItems() != null
-                ? new ArrayList<>(cart.getItems())
-                : new ArrayList<>();
+        List<CartItem> items = cartRepository.findByUserId(user.getId())
+                .map(cart -> new ArrayList<>(cart.getItems()))
+                .orElseGet(ArrayList::new);
         if (items.isEmpty()) {
-            throw new BadRequestException("No se puede confirmar una compra con el carrito vacío");
+            throw new BadRequestException("Tu carrito está vacío");
         }
 
-        // Bloquea las sesiones del carrito hasta que termine la transacción y las vuelve a leer de la base
-        // (SELECT ... FOR UPDATE). Si dos personas compran el último lugar a la vez, la segunda espera
-        // y ve los cupos ya descontados. Se bloquean en orden de id para que dos compras no se traben entre sí.
-        // Se deduplica por id (no con distinct(): el hashCode de las entidades recorre sus relaciones).
+        // Bloquea las fechas del carrito (SELECT ... FOR UPDATE) y las vuelve a leer: si dos personas compran
+        // el último lugar a la vez, la segunda espera y ve los lugares ya descontados. En orden de id, para no trabarse.
         Map<Long, ExperienceSession> sessionsById = new TreeMap<>();
         items.forEach(item -> sessionsById.putIfAbsent(item.getExperienceSession().getId(), item.getExperienceSession()));
         sessionsById.values().forEach(session -> entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE));
 
-        // Valida que cada item tenga cupos disponibles; si no, lanza excepción.
         BigDecimal subtotal = BigDecimal.ZERO;
         for (CartItem item : items) {
             ExperienceSession session = item.getExperienceSession();
-            if (!session.isActive()) {
-                throw new BadRequestException("La sesión " + session.getId() + " ya no está disponible");
-            }
-            if (session.getStartsAt() == null || session.getStartsAt().isBefore(LocalDateTime.now())) {
-                throw new BadRequestException("La sesión " + session.getId() + " ya comenzó o ya pasó");
-            }
-            if (session.getAvailableSeats() == null || session.getAvailableSeats() < item.getQuantity()) {
-                throw new BadRequestException("No hay cupos suficientes para la sesión " + session.getId());
-            }
-            // Calcula el subtotal sumando el precio unitario de la experiencia por la cantidad del item.
             Experience experience = session.getExperience();
-            if (experience == null || !experience.isActive()) {
-                throw new BadRequestException("La experiencia ya no está publicada");
+            String what = describe(session);
+            if (experience.getPublisher().getId().equals(user.getId())) {
+                throw new BadRequestException("No podés comprar tu propia experiencia (" + what + "). Sacala del carrito.");
             }
-            BigDecimal unitPrice = experience != null && experience.getEffectivePrice() != null
-                    ? experience.getEffectivePrice()
-                    : BigDecimal.ZERO;
-            subtotal = subtotal.add(unitPrice.multiply(BigDecimal.valueOf(item.getQuantity())));
+            if (!experience.isActive() || experience.getDeletedAt() != null || !experience.getPublisher().isActive()) {
+                throw new BadRequestException(what + " ya no está publicada. Sacala del carrito.");
+            }
+            if (!session.isActive()) {
+                throw new BadRequestException("Se canceló la fecha de " + what + ". Sacala del carrito.");
+            }
+            if (session.getStartsAt().isBefore(LocalDateTime.now())) {
+                throw new BadRequestException(what + " ya empezó. Sacala del carrito.");
+            }
+            if (session.getAvailableSeats() < item.getQuantity()) {
+                throw new BadRequestException(session.getAvailableSeats() == 0
+                        ? "Se agotaron los lugares de " + what + "."
+                        : "Para " + what + " quedan " + session.getAvailableSeats() + " lugares. Cambiá la cantidad.");
+            }
+            subtotal = subtotal.add(experience.getEffectivePrice().multiply(BigDecimal.valueOf(item.getQuantity())));
         }
 
-        BigDecimal discountAmount = BigDecimal.ZERO;
-        if (coupon != null) {
-            discountAmount = subtotal
-                    .multiply(coupon.getPercentage())
-                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
-        }
+        BigDecimal discountAmount = coupon == null ? BigDecimal.ZERO
+                : subtotal.multiply(coupon.getPercentage()).divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
         BigDecimal total = subtotal.subtract(discountAmount);
-
-        // Si el front dice cuánto le mostró al comprador y no coincide (el anfitrión cambió un precio mientras
-        // pagaba), no se cobra un monto distinto sin avisar.
+        // Si el total cambió mientras pagaba (el anfitrión editó un precio), no se cobra otro monto sin avisar
         if (request != null && request.getExpectedTotal() != null
                 && request.getExpectedTotal().subtract(total).abs().compareTo(new BigDecimal("0.01")) > 0) {
             throw new BadRequestException("El precio de alguna experiencia cambió mientras pagabas. "
                     + "Revisá el nuevo total y confirmá de nuevo.");
         }
-        long totalTickets = items.stream().mapToLong(CartItem::getQuantity).sum();
-        // ¿Es un regalo? Se valida acá (antes de tocar cupos) y, si el destinatario tiene cuenta, se le asignan las reservas
-        GiftRequestDTO gift = cleanGift(request != null ? request.getGift() : null);
-        // Solo se entrega en el momento si ese email es de una cuenta VERIFICADA (probó que el email es suyo).
-        // Si no, el regalo queda pendiente: las reservas siguen siendo de quien pagó hasta que esa persona cree su cuenta
-        // y verifique el email (AuthenticationService.claimGifts). Así, un email mal escrito no le regala el plan a otro.
+
+        // Un regalo se entrega en el momento solo si el email es de una cuenta VERIFICADA. Si no, queda pendiente
+        // (el voucher sigue siendo de quien pagó) hasta que esa persona cree su cuenta y verifique el email.
         User recipient = gift != null && gift.getRecipientEmail() != null ? verifiedRecipient(gift.getRecipientEmail(), user) : null;
-        // Crea la orden, genera un Booking por cada item, descuenta los cupos de las sesiones y vacía el carrito.
-        Order order = Order.builder()
+        Order order = orderRepository.save(Order.builder()
                 .user(user)
                 .discountCoupon(coupon)
                 .subtotal(subtotal)
                 .discountAmount(discountAmount)
                 .total(total)
-                .count(totalTickets)
                 .createdAt(LocalDateTime.now())
                 .giftRecipientName(gift != null ? gift.getRecipientName() : null)
                 .giftRecipientEmail(gift != null ? gift.getRecipientEmail() : null)
                 .giftMessage(gift != null ? gift.getMessage() : null)
-                .build();
-        order = orderRepository.save(order);
+                .build());
 
         List<Booking> bookings = new ArrayList<>();
         for (CartItem item : items) {
@@ -258,8 +249,7 @@ public class OrderServiceImpl implements OrderService {
             Experience experience = session.getExperience();
             session.setAvailableSeats(session.getAvailableSeats() - item.getQuantity());
             experienceSessionRepository.save(session);
-
-            Booking booking = Booking.builder()
+            bookings.add(bookingRepository.save(Booking.builder()
                     .order(order)
                     .experienceSession(session)
                     .quantity(item.getQuantity())
@@ -267,35 +257,31 @@ public class OrderServiceImpl implements OrderService {
                     .voucherCode(generateVoucherCode())
                     .createdAt(LocalDateTime.now())
                     .recipient(recipient)
-                    .build();
-            bookings.add(bookingRepository.save(booking));
-            if (gift != null) {
-                notificationService.create(user, "Regalo confirmado",
-                        "Tu regalo de \"" + experience.getTitle() + "\" para " + gift.getRecipientName() + " está confirmado. "
-                                + (recipient != null ? "Ya está en sus reservas."
-                                        : gift.getRecipientEmail() != null
-                                                ? "Le mandamos una invitación a " + gift.getRecipientEmail()
-                                                        + ": se lo pasamos cuando entre a PLAN con ese email. Hasta entonces el voucher es tuyo."
-                                                : "El voucher está en Mis reservas para que se lo des."));
-                if (recipient != null) {
-                    notificationService.create(recipient, "¡Te regalaron una experiencia!",
-                            user.getFirstName() + " te regaló \"" + experience.getTitle() + "\". "
-                                    + "Ya está en tus reservas, con el voucher.");
-                }
-            } else {
-                notificationService.create(user, "Reserva confirmada",
-                        "Tu reserva para \"" + experience.getTitle() + "\" fue confirmada.");
-            }
-            if (experience.getPublisher() != null && !experience.getPublisher().getId().equals(user.getId())) {
-                notificationService.create(experience.getPublisher(), "Nueva reserva",
-                        user.getFirstName() + " reservó \"" + experience.getTitle() + "\".");
+                    .build()));
+            notificationService.create(experience.getPublisher(), "Nueva reserva",
+                    user.getFirstName() + " reservó \"" + experience.getTitle() + "\".");
+        }
+        cartItemRepository.deleteAll(items);
+
+        String titles = bookings.stream().map(b -> "\"" + b.getExperienceSession().getExperience().getTitle() + "\"")
+                .collect(Collectors.joining(", "));
+        if (gift == null) {
+            notificationService.create(user, "Reserva confirmada", "Tu reserva para " + titles + " está confirmada.");
+        } else {
+            notificationService.create(user, "Regalo confirmado", "Tu regalo para " + gift.getRecipientName() + " ("
+                    + titles + ") está confirmado. " + (recipient != null ? "Ya está en sus reservas."
+                            : gift.getRecipientEmail() != null
+                                    ? "Se lo pasamos cuando entre a PLAN con " + gift.getRecipientEmail()
+                                            + " y lo verifique. Hasta entonces el voucher es tuyo."
+                                    : "El voucher está en Mis reservas para que se lo des."));
+            if (recipient != null) {
+                notificationService.create(recipient, "¡Te regalaron una experiencia!",
+                        user.getFirstName() + " te regaló " + titles + ". Ya está en tus reservas, con el voucher.");
             }
         }
 
-        cartItemRepository.deleteAll(items);
-
-        // Regalo con email: le avisamos por mail a quien lo recibe (sin el voucher: lo ve en PLAN cuando el regalo es suyo).
-        // Va al final, cuando ya está todo guardado. Si el mail falla, la compra no se deshace (ya está pagada).
+        // Regalo con email: se le avisa por mail a quien lo recibe (sin el voucher). Va al final, con todo guardado;
+        // si el mail falla, la compra sigue (ya está pagada) y se le avisa a quien regaló.
         if (gift != null && gift.getRecipientEmail() != null) {
             try {
                 mailService.sendGift(gift.getRecipientEmail(), gift.getRecipientName(), user, gift.getMessage(), bookings,
@@ -309,11 +295,16 @@ public class OrderServiceImpl implements OrderService {
         }
 
         order.setBookings(bookings);
-        return toResponse(order);
+        return toResponse(order, user);
+    }
+
+    // "“Trekking al Refugio Frey” del sáb 22/11 a las 09:30" (para los mensajes de error del checkout)
+    private String describe(ExperienceSession session) {
+        return "\"" + session.getExperience().getTitle() + "\" del " + session.getStartsAt().format(SESSION_DATE);
     }
 
     // Valida los datos del regalo: para quién es (obligatorio), su email (opcional) y la dedicatoria (hasta 300 caracteres).
-    private GiftRequestDTO cleanGift(GiftRequestDTO gift) throws BadRequestException {
+    private GiftRequestDTO cleanGift(GiftRequestDTO gift, User buyer) throws BadRequestException {
         if (gift == null) {
             return null;
         }
@@ -328,6 +319,9 @@ public class OrderServiceImpl implements OrderService {
         }
         if (!email.isEmpty() && (email.length() > 150 || !email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$"))) {
             throw new BadRequestException("El email de quien recibe el regalo no es válido");
+        }
+        if (email.equalsIgnoreCase(buyer.getEmail())) {
+            throw new BadRequestException("Ese es tu propio email: poné el de quien recibe el regalo");
         }
         if (message.length() > 300) {
             throw new BadRequestException("La dedicatoria puede tener hasta 300 caracteres");
@@ -349,14 +343,14 @@ public class OrderServiceImpl implements OrderService {
 
         DiscountCoupon coupon = discountCouponRepository
                 .findByCodeForUpdate(request.getCouponCode().trim().toUpperCase())
-                .orElseThrow(() -> new ResourceNotFoundException("No existe un cupón con ese código"));
+                .orElseThrow(() -> new BadRequestException("No existe un cupón con ese código"));
 
         String reason = DiscountCouponServiceImpl.reasonIfInvalid(coupon);
         if (reason != null) {
             throw new BadRequestException(DiscountCouponServiceImpl.describeReason(reason));
         }
 
-        if (orderRepository.existsByUserIdAndDiscountCouponId(user.getId(), coupon.getId())) {
+        if (orderRepository.hasUsedCoupon(user.getId(), coupon.getId())) {
             throw new BadRequestException(DiscountCouponServiceImpl.describeReason(DiscountCouponServiceImpl.ALREADY_USED));
         }
 
@@ -367,7 +361,7 @@ public class OrderServiceImpl implements OrderService {
     private void simulatePayment(OrderRequestDTO request) throws BadRequestException {
         String method = request != null ? request.getPaymentMethod() : null;
         if (!"card".equals(method)) {
-            return; // sin medio (Insomnia / seed), tarjeta guardada o billetera: siempre aprobado
+            return; // tarjeta guardada o billetera: pago simulado, siempre aprobado
         }
         String digits = request.getCardNumber() != null ? request.getCardNumber().replaceAll("\\D", "") : "";
         if (digits.length() < 13 || digits.length() > 19 || !passesLuhn(digits)) {
@@ -393,31 +387,23 @@ public class OrderServiceImpl implements OrderService {
         return sum % 10 == 0;
     }
 
-    // Lo devuelto de una orden: cada reserva reembolsada devuelve su parte del total (prorrateando el cupón).
+    // Lo devuelto de una orden: cada reserva cancelada devuelve lo que se pagó por ella (con el cupón repartido).
     private BigDecimal refundedAmount(Order order) {
-        if (order.getBookings() == null) {
-            return BigDecimal.ZERO;
-        }
-        BigDecimal refunded = BigDecimal.ZERO;
-        for (Booking booking : order.getBookings()) {
-            if (!booking.isRefunded()) {
-                continue;
-            }
-            Experience experience = booking.getExperienceSession() != null
-                    ? booking.getExperienceSession().getExperience()
-                    : null;
-            refunded = refunded.add(BookingServiceImpl.paidAmount(booking, experience));
-        }
-        return refunded.min(orZero(order.getTotal()));
+        return order.getBookings().stream().filter(Booking::isRefunded)
+                .map(BookingServiceImpl::paidAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
-    // La comisión de PLAN sobre un monto; la usan las órdenes, las estadísticas y cada reserva.
+    // Lo que le queda a PLAN de una orden: lo cobrado menos lo de los anfitriones (los cupones los absorbe PLAN).
+    private BigDecimal planCommission(Order order) {
+        return order.getBookings().stream()
+                .map(BookingServiceImpl::planCommission)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    // La comisión de PLAN sobre un monto (10 %).
     public static BigDecimal commissionOf(BigDecimal amount) {
         return amount.multiply(PLAN_COMMISSION_RATE).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private BigDecimal orZero(BigDecimal value) {
-        return value != null ? value : BigDecimal.ZERO;
     }
 
     // Genera el código de voucher visible del Booking (ej. ETRIP-A1B2C3D4).
@@ -429,60 +415,23 @@ public class OrderServiceImpl implements OrderService {
         return user != null && user.getRole() == Role.ADMIN;
     }
 
-    private String buyerName(User user) {
-        if (user == null) {
-            return null;
-        }
-        String first = user.getFirstName() != null ? user.getFirstName() : "";
-        String last = user.getLastName() != null ? user.getLastName() : "";
-        String name = (first + " " + last).trim();
-        return name.isEmpty() ? user.getEmail() : name;
-    }
-
-    // Arma el DTO de la orden junto con los vouchers (Bookings) que generó.
-    private OrderResponseDTO toResponse(Order order) {
-        List<BookingResponseDTO> bookingDtos = new ArrayList<>();
-        List<Booking> bookings = order.getBookings();
-        User buyer = order.getUser();
-        if (bookings != null) {
-            for (Booking booking : bookings) {
-                ExperienceSession session = booking.getExperienceSession();
-                Experience experience = session != null ? session.getExperience() : null;
-                bookingDtos.add(BookingServiceImpl.withEarnings(BookingResponseDTO.builder()
-                        .id(booking.getId())
-                        // Un regalo ya entregado: el voucher es de quien lo recibió, quien pagó no ve el código
-                        .voucherCode(booking.getRecipient() != null ? null : booking.getVoucherCode())
-                        .orderId(order.getId())
-                        .experienceSessionId(session != null ? session.getId() : null)
-                        .experienceId(experience != null ? experience.getId() : null)
-                        .experienceTitle(experience != null ? experience.getTitle() : null)
-                        .startsAt(session != null ? session.getStartsAt() : null)
-                        .endsAt(session != null ? session.getEndsAt() : null)
-                        .quantity(booking.getQuantity())
-                        .unitPrice(BookingServiceImpl.paidUnitPrice(booking, experience))
-                        .createdAt(booking.getCreatedAt())
-                        .refunded(booking.isRefunded())
-                        .refundedAt(booking.getRefundedAt())
-                        .status(bookingStatus(booking, session))
-                        .buyerId(buyer != null ? buyer.getId() : null)
-                        .buyerName(buyerName(buyer))
-                        .build(), booking, experience));
-            }
-        }
-
-        BigDecimal refunded = refundedAmount(order);
+    // La orden con sus reservas, armadas para quien la mira (ver BookingServiceImpl.toResponse).
+    private OrderResponseDTO toResponse(Order order, User viewer) {
+        List<BookingResponseDTO> bookings = order.getBookings().stream()
+                .map(booking -> BookingServiceImpl.toResponse(booking, viewer))
+                .toList();
         return OrderResponseDTO.builder()
                 .id(order.getId())
                 .status(orderStatus(order))
-                .userId(order.getUser() != null ? order.getUser().getId() : null)
+                .userId(order.getUser().getId())
                 .couponCode(order.getDiscountCoupon() != null ? order.getDiscountCoupon().getCode() : null)
                 .createdAt(order.getCreatedAt())
                 .subtotal(order.getSubtotal())
                 .discountAmount(order.getDiscountAmount())
                 .total(order.getTotal())
-                .refunded(refunded)
-                .commission(commissionOf(orZero(order.getTotal()).subtract(refunded)))
-                .bookings(bookingDtos)
+                .refunded(refundedAmount(order))
+                .commission(planCommission(order))
+                .bookings(bookings)
                 .giftRecipientName(order.getGiftRecipientName())
                 .giftRecipientEmail(order.getGiftRecipientEmail())
                 .giftMessage(order.getGiftMessage())
@@ -532,7 +481,32 @@ public class OrderServiceImpl implements OrderService {
         orderRepository.save(order);
         // Acá sí: si el mail no sale, no se guarda el cambio y quien regaló ve el error para reintentar
         mailService.sendGift(email, order.getGiftRecipientName(), user, order.getGiftMessage(), active, recipient != null);
-        return toResponse(order);
+        return toResponse(order, user);
+    }
+
+    // Regalos hechos a este email antes de que tuviera una cuenta verificada: pasan a ser suyos.
+    // Lo llaman la verificación del email, el cambio de contraseña (también verifica) y la reactivación de la cuenta.
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public void claimPendingGifts(User user) {
+        if (!user.isEmailVerified() || !user.isActive()) {
+            return;
+        }
+        Map<Order, List<Booking>> byOrder = new LinkedHashMap<>();
+        for (Booking booking : bookingRepository.findByRecipientIsNullAndOrder_GiftRecipientEmailIgnoreCase(user.getEmail())) {
+            if (!booking.isRefunded() && !booking.getOrder().getUser().getId().equals(user.getId())) {
+                booking.setRecipient(user);
+                bookingRepository.save(booking);
+                byOrder.computeIfAbsent(booking.getOrder(), order -> new ArrayList<>()).add(booking);
+            }
+        }
+        byOrder.forEach((order, bookings) -> {
+            notificationService.create(user, "¡Tenés un regalo esperándote!", order.getUser().getFirstName()
+                    + " te regaló " + (bookings.size() == 1 ? "una experiencia" : bookings.size() + " experiencias")
+                    + ". Ya está en tus reservas, con el voucher.");
+            notificationService.create(order.getUser(), "Regalo entregado",
+                    user.getFirstName() + " ya tiene tu regalo en sus reservas.");
+        });
     }
 
     // Quien pagó se queda con un regalo pendiente: deja de ser un regalo y las reservas son suyas, como cualquier compra.
@@ -545,7 +519,7 @@ public class OrderServiceImpl implements OrderService {
         order.setGiftRecipientEmail(null);
         order.setGiftMessage(null);
         orderRepository.save(order);
-        return toResponse(order);
+        return toResponse(order, user);
     }
 
     // Orden de quien pide, que es un regalo todavía sin dueño y con alguna reserva vigente
@@ -568,13 +542,5 @@ public class OrderServiceImpl implements OrderService {
             throw new BadRequestException("El regalo ya no está vigente (la fecha pasó o se reembolsó)");
         }
         return order;
-    }
-
-    // Estado de la reserva: REFUNDED, COMPLETED (la fecha ya terminó) o CONFIRMED.
-    private String bookingStatus(Booking booking, ExperienceSession session) {
-        if (booking.isRefunded()) {
-            return "REFUNDED";
-        }
-        return session != null && session.hasEnded() ? "COMPLETED" : "CONFIRMED";
     }
 }

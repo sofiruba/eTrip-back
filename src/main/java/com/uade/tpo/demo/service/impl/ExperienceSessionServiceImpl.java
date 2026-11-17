@@ -13,25 +13,26 @@ import org.springframework.transaction.annotation.Transactional;
 import com.uade.tpo.demo.dtos.request.ExperienceSessionRequestDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceSessionResponseDTO;
 import com.uade.tpo.demo.dtos.response.HostAgendaItemDTO;
+import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceSession;
-import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
+import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionSpecifications;
-import com.uade.tpo.demo.repository.BookingRepository;
-import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.service.ExperienceSessionService;
 import com.uade.tpo.demo.service.NotificationService;
 import com.uade.tpo.demo.service.WaitlistService;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+
 import lombok.RequiredArgsConstructor;
 
 @Service
@@ -46,7 +47,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     private final EntityManager entityManager;
     private final WaitlistService waitlistService;
 
-    // Lista turnos con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
+    // Lista fechas con filtros opcionales combinables (experiencia, con cupo, rango de fechas).
     @Override
     @Transactional(readOnly = true)
     public Page<ExperienceSessionResponseDTO> searchSessions(
@@ -121,20 +122,20 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         return agenda;
     }
 
-    // Un turno puntual por id.
+    // Una fecha puntual por id.
     @Override
     @Transactional(readOnly = true)
     public ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+                .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
         if (!isPubliclyActive(session)) {
-            throw new ResourceNotFoundException("La sesión solicitada ya no está disponible");
+            throw new ResourceNotFoundException("Esta fecha ya no está disponible");
         }
 
         return mapToResponseDTO(session);
     }
 
-    // Crea un turno; valida fechas y solapamiento. Solo el dueño de la experiencia o un ADMIN.
+    // Crea una fecha; valida fechas y solapamiento. Solo el dueño de la experiencia o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceSessionResponseDTO createSession(ExperienceSessionRequestDTO request, User currentUser)
@@ -144,6 +145,9 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         Experience experience = experienceRepository.findById(request.getExperienceId())
                 .orElseThrow(() -> new ResourceNotFoundException("La experiencia no existe"));
         assertCanManage(experience, currentUser);
+        if (experience.getDeletedAt() != null) {
+            throw new BadRequestException("Esta experiencia fue dada de baja: no se le pueden agregar fechas");
+        }
 
         validateNoOverlap(experience.getId(), null, request.getStartsAt(), request.getEndsAt());
 
@@ -160,15 +164,14 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         return mapToResponseDTO(savedSession);
     }
 
-    // Edita fecha/capacidad de un turno. Valida ownership contra la experiencia actual del
-    // turno antes de aplicar ningún cambio del body.
+    // Edita el horario o el cupo de una fecha. Solo el dueño de la experiencia o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceSessionResponseDTO updateSession(Long sessionId, ExperienceSessionRequestDTO request,
             User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+                .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
         // Bloquea la fecha (como la compra y el reembolso): si alguien compra mientras se cambia el cupo,
         // no se pisan los lugares disponibles.
         entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
@@ -225,13 +228,13 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         return mapToResponseDTO(savedSession);
     }
 
-    // Baja lógica un turno. Se conserva para no romper reservas históricas.
+    // Cancela una fecha (baja lógica): reembolsa sus reservas y queda en el historial.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public void deleteSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
+                .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
         assertCanManage(session.getExperience(), currentUser);
         // Bloquea la fecha antes de reembolsar sus reservas (mismo orden que BookingServiceImpl.refundBooking)
         entityManager.refresh(session, LockModeType.PESSIMISTIC_WRITE);
@@ -240,10 +243,10 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
             throw new BadRequestException("Esta fecha ya está cancelada");
         }
         if (session.hasEnded()) {
-            throw new BadRequestException("No se puede cancelar una fecha que ya terminó");
+            throw new BadRequestException("Esta fecha ya terminó: no se puede cancelar");
         }
         if (session.getStartsAt() != null && session.getStartsAt().isBefore(LocalDateTime.now())) {
-            throw new BadRequestException("No se puede cancelar una sesión que ya comenzó");
+            throw new BadRequestException("Esta fecha ya empezó: no se puede cancelar");
         }
 
         int releasedSeats = 0;
@@ -253,11 +256,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 booking.setRefundedAt(LocalDateTime.now());
                 releasedSeats += booking.getQuantity();
                 bookingRepository.save(booking);
-                if (booking.getOrder() != null) {
-                    notificationService.create(booking.getOrder().getUser(), "Sesión cancelada",
-                            "La sesión de \"" + session.getExperience().getTitle()
-                                    + "\" fue cancelada y tu reserva fue reembolsada.");
-                }
+                notificationService.bookingCancelled(booking, "el anfitrión canceló la fecha");
             }
         }
         if (releasedSeats > 0) {
@@ -396,6 +395,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
                 .status(status(session))
                 .editable(session.isActive() && session.getStartsAt().isAfter(LocalDateTime.now()))
                 .waitlistCount(waitlistService.count(session.getId()))
+                .refundableUntil(BookingServiceImpl.refundDeadline(session))
                 .build();
     }
 

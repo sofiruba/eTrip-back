@@ -12,8 +12,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -31,13 +31,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uade.tpo.demo.entity.Booking;
+import com.uade.tpo.demo.entity.Currency;
 import com.uade.tpo.demo.entity.DiscountCoupon;
 import com.uade.tpo.demo.entity.Experience;
-import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.ExperienceCategory;
 import com.uade.tpo.demo.entity.ExperienceImage;
 import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Favorite;
+import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.Notification;
 import com.uade.tpo.demo.entity.Order;
 import com.uade.tpo.demo.entity.Review;
@@ -45,12 +46,13 @@ import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.entity.WaitlistEntry;
 import com.uade.tpo.demo.repository.BookingRepository;
+import com.uade.tpo.demo.repository.CurrencyRepository;
 import com.uade.tpo.demo.repository.DiscountCouponRepository;
 import com.uade.tpo.demo.repository.ExperienceCategoryRepository;
 import com.uade.tpo.demo.repository.ExperienceRepository;
-import com.uade.tpo.demo.repository.InterestRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.FavoriteRepository;
+import com.uade.tpo.demo.repository.InterestRepository;
 import com.uade.tpo.demo.repository.NotificationRepository;
 import com.uade.tpo.demo.repository.OrderRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
@@ -66,7 +68,7 @@ import lombok.extern.slf4j.Slf4j;
  * </pre>
  * BORRA TODOS LOS DATOS de la base y carga lo que hay en {@code resources/seed/seed-data.json} con las fotos de
  * {@code resources/seed/fotos} (créditos en {@code resources/seed/CREDITOS-FOTOS.md}). Después la app sigue normal.
- * Sin el flag no hace nada, así que se puede borrar esta clase cuando ya no haga falta.
+ * Sin el flag no hace nada.
  *
  * Además de lo que se puede crear por la API, arma lo que la API no deja crear a mano: fechas que ya pasaron,
  * compras de esas fechas y reseñas (el back solo deja reseñar experiencias que terminaron).
@@ -79,6 +81,9 @@ public class DataSeeder implements CommandLineRunner {
     private static final String PASSWORD = "plan1234";
     // Siempre los mismos datos "al azar": si se vuelve a cargar, queda igual
     private final Random random = new Random(2026);
+    // La cuenta de demo y qué cupones usó cada persona (cada cupón, una vez por persona)
+    private User demoBuyer;
+    private final Map<Long, Set<Long>> usedCoupons = new HashMap<>();
 
     private final JdbcTemplate jdbcTemplate;
     private final TransactionTemplate transaction;
@@ -96,6 +101,7 @@ public class DataSeeder implements CommandLineRunner {
     private final FavoriteRepository favoriteRepository;
     private final WaitlistRepository waitlistRepository;
     private final InterestRepository interestRepository;
+    private final CurrencyRepository currencyRepository;
     // Intereses por nombre: los usuarios y las experiencias del JSON los nombran así
     private final Map<String, Interest> interestsByName = new HashMap<>();
 
@@ -105,7 +111,7 @@ public class DataSeeder implements CommandLineRunner {
             DiscountCouponRepository couponRepository, OrderRepository orderRepository, BookingRepository bookingRepository,
             ReviewRepository reviewRepository, NotificationRepository notificationRepository,
             FavoriteRepository favoriteRepository, WaitlistRepository waitlistRepository,
-            InterestRepository interestRepository) {
+            InterestRepository interestRepository, CurrencyRepository currencyRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.transaction = new TransactionTemplate(transactionManager);
         this.objectMapper = objectMapper;
@@ -122,6 +128,7 @@ public class DataSeeder implements CommandLineRunner {
         this.favoriteRepository = favoriteRepository;
         this.waitlistRepository = waitlistRepository;
         this.interestRepository = interestRepository;
+        this.currencyRepository = currencyRepository;
     }
 
     @Override
@@ -172,6 +179,17 @@ public class DataSeeder implements CommandLineRunner {
             }
         }
 
+        // Monedas para ver los precios (el admin actualiza las cotizaciones desde el panel)
+        for (JsonNode node : data.get("currencies")) {
+            currencyRepository.save(Currency.builder()
+                    .code(node.get("code").asText())
+                    .name(node.get("name").asText())
+                    .symbol(node.get("symbol").asText())
+                    .arsPerUnit(node.get("arsPerUnit").decimalValue())
+                    .updatedAt(now)
+                    .build());
+        }
+
         // 2. Cupones (uno vencido y uno desactivado, para probar las validaciones)
         Map<String, DiscountCoupon> coupons = new HashMap<>();
         for (JsonNode node : data.get("coupons")) {
@@ -192,7 +210,8 @@ public class DataSeeder implements CommandLineRunner {
         for (JsonNode node : data.get("buyers")) {
             buyers.add(createUser(node, PASSWORD, Role.CLIENTE));
         }
-        User demoBuyer = buyers.get(0); // sofia@plan.com: la cuenta para mostrar el flujo del comprador
+        demoBuyer = buyers.get(0); // sofia@plan.com: la cuenta para mostrar el flujo del comprador
+        usedCoupons.clear();
 
         // 4. Experiencias con fotos, fechas pasadas y futuras, compras y reseñas
         int experienceCount = 0;
@@ -250,7 +269,7 @@ public class DataSeeder implements CommandLineRunner {
                         if (session.getAvailableSeats() < quantity) {
                             break;
                         }
-                        buy(buyer, session, quantity, session.getStartsAt().minusDays(3 + random.nextInt(15)), pickCoupon(usableCoupons));
+                        buy(buyer, session, quantity, session.getStartsAt().minusDays(3 + random.nextInt(15)), pickCoupon(buyer, usableCoupons));
                         bookingCount++;
                         // En la primera experiencia la cuenta de demo no reseña (ver abajo)
                         boolean demoKeepsPending = buyer == demoBuyer && experienceCount == 1;
@@ -283,7 +302,7 @@ public class DataSeeder implements CommandLineRunner {
                         int quantity = Math.min(1 + random.nextInt(3), target - (capacity - session.getAvailableSeats()));
                         // La cuenta de demo no entra en las compras al azar: solo tiene las suyas (ver abajo)
                         User buyer = buyers.get(1 + random.nextInt(buyers.size() - 1));
-                        Booking booking = buy(buyer, session, quantity, now.minusDays(1 + random.nextInt(10)), pickCoupon(usableCoupons));
+                        Booking booking = buy(buyer, session, quantity, now.minusDays(1 + random.nextInt(10)), pickCoupon(buyer, usableCoupons));
                         bookingCount++;
                         // Algunas reservas se reembolsaron: los lugares vuelven a la fecha (salvo en la agotada)
                         if (target != capacity && random.nextInt(25) == 0) {
@@ -315,7 +334,7 @@ public class DataSeeder implements CommandLineRunner {
                     gift.setRecipient(demoBuyer);
                     bookingRepository.save(gift);
                     notify(giver, "Regalo confirmado", "Le regalaste \"" + experience.getTitle() + "\" a "
-                            + order.getGiftRecipientName() + ". Voucher " + gift.getVoucherCode() + ".", now.minusDays(1));
+                            + order.getGiftRecipientName() + ". Ya está en sus reservas.", now.minusDays(1));
                     notify(demoBuyer, "¡Te regalaron una experiencia!", giver.getFirstName() + " te regaló \""
                             + experience.getTitle() + "\". Ya está en Mis reservas con tu voucher.", now.minusDays(1));
                 }
@@ -332,7 +351,7 @@ public class DataSeeder implements CommandLineRunner {
                     Booking booking = buy(demoBuyer, upcoming.get(1), 2, now.minusDays(2), null);
                     bookingCount++;
                     notify(demoBuyer, "¡Reserva confirmada!", "Tu lugar en \"" + experience.getTitle() + "\" está confirmado. "
-                            + "Voucher " + booking.getVoucherCode() + ".", now.minusDays(2));
+                            + "El voucher está en Mis reservas.", now.minusDays(2));
                 }
             }
         }
@@ -340,8 +359,6 @@ public class DataSeeder implements CommandLineRunner {
         notify(demoBuyer, "Bienvenida a PLAN", "Usá el cupón BIENVENIDA15 en tu próxima compra.", now.minusDays(20));
         log.info("=== DataSeeder listo: {} categorías, {} usuarios, {} experiencias, {} fechas, {} reservas ({} reembolsadas, 1 regalo), {} reseñas, {} cupones, {} guardados, {} en lista de espera ===",
                 categories.size(), userRepository.count(), experienceCount, sessionCount, bookingCount, refundCount, reviewCount, coupons.size(), favoriteCount, waitlistCount);
-        log.info("Admin: {} / {} · Compradores y anfitriones: <email del JSON> / {} · Demo: {}",
-                data.get("admin").get("email").asText(), data.get("admin").get("password").asText(), PASSWORD, demoBuyer.getEmail());
     }
 
     private User createUser(JsonNode node, String password, Role role) {
@@ -434,7 +451,6 @@ public class DataSeeder implements CommandLineRunner {
         Order order = orderRepository.save(Order.builder()
                 .user(buyer)
                 .createdAt(createdAt)
-                .count((long) quantity)
                 .subtotal(subtotal)
                 .discountAmount(discount)
                 .total(subtotal.subtract(discount))
@@ -494,7 +510,19 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /** 1 de cada 5 compras usa un cupón. */
-    private DiscountCoupon pickCoupon(List<DiscountCoupon> coupons) {
-        return random.nextInt(5) == 0 ? coupons.get(random.nextInt(coupons.size())) : null;
+    // 1 de cada 5 compras usa un cupón, respetando la regla de un uso por persona. La cuenta de demo no usa
+    // ninguno, así puede probar BIENVENIDA15 en la demo.
+    private DiscountCoupon pickCoupon(User buyer, List<DiscountCoupon> coupons) {
+        if (buyer == demoBuyer || random.nextInt(5) != 0) {
+            return null;
+        }
+        Set<Long> used = usedCoupons.computeIfAbsent(buyer.getId(), id -> new HashSet<>());
+        List<DiscountCoupon> left = coupons.stream().filter(coupon -> !used.contains(coupon.getId())).toList();
+        if (left.isEmpty()) {
+            return null;
+        }
+        DiscountCoupon coupon = left.get(random.nextInt(left.size()));
+        used.add(coupon.getId());
+        return coupon;
     }
 }

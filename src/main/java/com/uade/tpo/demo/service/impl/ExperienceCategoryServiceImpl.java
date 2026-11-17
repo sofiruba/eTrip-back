@@ -34,7 +34,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
     @Override
     public ExperienceCategoryResponseDTO getCategoryById(Long categoryId) throws ResourceNotFoundException {
         ExperienceCategory category = experienceCategoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe una categoria con id " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("La categoría no existe"));
         return toResponse(category);
     }
 
@@ -45,7 +45,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
             throws BadRequestException, CategoryDuplicateException {
         String name = requireName(request.getName());
         if (experienceCategoryRepository.findByName(name).isPresent()) {
-            throw new CategoryDuplicateException("Ya existe una categoria con el nombre \"" + name + "\"");
+            throw new CategoryDuplicateException("Ya existe una categoría con el nombre \"" + name + "\"");
         }
 
         ExperienceCategory category = ExperienceCategory.builder()
@@ -62,12 +62,12 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
     public ExperienceCategoryResponseDTO updateCategory(Long categoryId, ExperienceCategoryRequestDTO request)
             throws ResourceNotFoundException, BadRequestException, CategoryDuplicateException {
         ExperienceCategory category = experienceCategoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe una categoria con id " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("La categoría no existe"));
 
         String name = requireName(request.getName());
         Optional<ExperienceCategory> sameName = experienceCategoryRepository.findByName(name);
         if (sameName.isPresent() && !sameName.get().getId().equals(categoryId)) {
-            throw new CategoryDuplicateException("Ya existe otra categoria con el nombre \"" + name + "\"");
+            throw new CategoryDuplicateException("Ya existe otra categoría con el nombre \"" + name + "\"");
         }
 
         category.setName(name);
@@ -81,16 +81,16 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
     @Transactional(rollbackFor = Throwable.class)
     public void deleteCategory(Long categoryId) throws ResourceNotFoundException, BadRequestException {
         ExperienceCategory category = experienceCategoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe una categoria con id " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("La categoría no existe"));
 
         if (category.getExperiences() != null && !category.getExperiences().isEmpty()) {
             throw new BadRequestException(
-                    "No se puede borrar la categoria \"" + category.getName()
+                    "No se puede borrar la categoría \"" + category.getName()
                             + "\" porque tiene experiencias asociadas");
         }
         if (category.getInterests() != null && !category.getInterests().isEmpty()) {
             throw new BadRequestException(
-                    "No se puede borrar la categoria \"" + category.getName()
+                    "No se puede borrar la categoría \"" + category.getName()
                             + "\" porque tiene intereses asociados. Pasalos a otra categoría o borralos primero");
         }
 
@@ -99,10 +99,10 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
 
     private String requireName(String name) throws BadRequestException {
         if (name == null || name.isBlank()) {
-            throw new BadRequestException("El nombre de la categoria es obligatorio");
+            throw new BadRequestException("El nombre de la categoría es obligatorio");
         }
         if (name.trim().length() > 100) {
-            throw new BadRequestException("El nombre de la categoria puede tener hasta 100 caracteres");
+            throw new BadRequestException("El nombre de la categoría puede tener hasta 100 caracteres");
         }
         return name.trim();
     }
@@ -110,7 +110,7 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
     private String description(String description) throws BadRequestException {
         String value = trimToNull(description);
         if (value != null && value.length() > 255) {
-            throw new BadRequestException("La descripción de la categoria puede tener hasta 255 caracteres");
+            throw new BadRequestException("La descripción de la categoría puede tener hasta 255 caracteres");
         }
         return value;
     }
@@ -128,6 +128,8 @@ public class ExperienceCategoryServiceImpl implements ExperienceCategoryService 
                 .id(category.getId())
                 .name(category.getName())
                 .description(category.getDescription())
+                .experienceCount(category.getExperiences() == null ? 0
+                        : category.getExperiences().stream().filter(experience -> experience.getDeletedAt() == null).count())
                 .build();
     }
 }

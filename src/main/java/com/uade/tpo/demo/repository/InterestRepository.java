@@ -16,6 +16,4 @@ public interface InterestRepository extends JpaRepository<Interest, Long> {
     List<Interest> findByNameIn(Collection<String> names);
 
     List<Interest> findAllByOrderByCategoryNameAscNameAsc();
-
-    boolean existsByCategoryId(Long categoryId);
 }

@@ -1,6 +1,8 @@
 package com.uade.tpo.demo.service.impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -10,8 +12,8 @@ import org.springframework.transaction.annotation.Transactional;
 import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
+import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
-import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Review;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
@@ -96,22 +98,21 @@ public class ReviewServiceImpl implements ReviewService {
             throw new BadRequestException("Ya reseñaste esta experiencia");
         }
 
-        // Reservas propias y las que me regalaron
-        java.util.List<com.uade.tpo.demo.entity.Booking> myBookings = new java.util.ArrayList<>(
-                bookingRepository.findByOrder_User_IdAndExperienceSession_Experience_Id(currentUser.getId(), experience.getId()));
+        // Reseña quien tiene el voucher: quien compró o, si fue un regalo ya entregado, quien lo recibió (no quien pagó)
+        List<Booking> myBookings = new ArrayList<>(bookingRepository
+                .findByOrder_User_IdAndExperienceSession_Experience_Id(currentUser.getId(), experience.getId()).stream()
+                .filter(booking -> booking.getRecipient() == null)
+                .toList());
         myBookings.addAll(bookingRepository.findByRecipient_IdAndExperienceSession_Experience_Id(currentUser.getId(), experience.getId()));
         if (myBookings.isEmpty()) {
-            throw new BadRequestException("Solo podés reseñar una experiencia que reservaste");
+            throw new BadRequestException("Solo podés reseñar una experiencia a la que fuiste");
         }
-        boolean completedBooking = myBookings.stream()
-                // Una reserva reembolsada (o de una sesión cancelada) no habilita a reseñar
-                .filter(reviewBooking -> !reviewBooking.isRefunded())
-                .map(reviewBooking -> reviewBooking.getExperienceSession())
-                .filter(java.util.Objects::nonNull)
-                .map(ExperienceSession::getEndsAt)
-                .anyMatch(endsAt -> endsAt != null && endsAt.isBefore(LocalDateTime.now()));
-        if (!completedBooking) {
-            throw new BadRequestException("Solo podés reseñar una experiencia después de que termine.");
+        // Una reserva cancelada no habilita a reseñar; tiene que haber terminado
+        boolean attended = myBookings.stream()
+                .filter(booking -> !booking.isRefunded())
+                .anyMatch(booking -> booking.getExperienceSession().hasEnded());
+        if (!attended) {
+            throw new BadRequestException("Vas a poder reseñarla cuando termine la experiencia");
         }
 
         Review review = Review.builder()

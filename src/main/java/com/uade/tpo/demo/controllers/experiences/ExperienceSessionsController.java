@@ -39,7 +39,7 @@ public class ExperienceSessionsController {
     private final ExperienceSessionService experienceSessionService;
     private final WaitlistService waitlistService;
 
-    // Lista turnos con filtros opcionales combinables: experienceId, onlyAvailable (con cupo), dateFrom/dateTo.
+    // Lista fechas con filtros opcionales combinables: experienceId, onlyAvailable (con cupo), dateFrom/dateTo.
     @GetMapping
     public ResponseEntity<Page<ExperienceSessionResponseDTO>> getSessions(
             @RequestParam(required = false) Integer page,
@@ -53,7 +53,7 @@ public class ExperienceSessionsController {
                 experienceId, onlyAvailable, dateFrom, dateTo, pageRequest(page, size)));
     }
 
-    // Turnos de una experiencia puntual, con availableSeats y los mismos filtros opcionales.
+    // Fechas de una experiencia puntual, con availableSeats y los mismos filtros opcionales.
     @GetMapping("/experience/{experienceId}")
     public ResponseEntity<Page<ExperienceSessionResponseDTO>> getSessionsByExperience(
             @PathVariable Long experienceId,
@@ -100,14 +100,14 @@ public class ExperienceSessionsController {
         return ResponseEntity.noContent().build();
     }
 
-    // Un turno puntual por id.
+    // Una fecha puntual por id.
     @GetMapping("/{sessionId}")
     public ResponseEntity<ExperienceSessionResponseDTO> getSessionById(@PathVariable Long sessionId)
             throws ResourceNotFoundException {
         return ResponseEntity.ok(experienceSessionService.getSessionById(sessionId));
     }
 
-    // Crea un turno nuevo; solo el dueño de la experiencia o un ADMIN.
+    // Crea una fecha nuevo; solo el dueño de la experiencia o un ADMIN.
     @PostMapping
     public ResponseEntity<ExperienceSessionResponseDTO> createSession(
             @RequestBody ExperienceSessionRequestDTO request,
@@ -117,7 +117,7 @@ public class ExperienceSessionsController {
         return ResponseEntity.created(URI.create("/experience-sessions/" + result.getId())).body(result);
     }
 
-    // Edita fecha/capacidad de un turno; solo el dueño de la experiencia o un ADMIN.
+    // Edita fecha/capacidad de una fecha; solo el dueño de la experiencia o un ADMIN.
     @PutMapping("/{sessionId}")
     public ResponseEntity<ExperienceSessionResponseDTO> updateSession(
             @PathVariable Long sessionId,
@@ -127,7 +127,7 @@ public class ExperienceSessionsController {
         return ResponseEntity.ok(experienceSessionService.updateSession(sessionId, request, currentUser));
     }
 
-    // Cancela un turno futuro (baja lógica) y reembolsa sus reservas. Solo el dueño de la experiencia o un ADMIN.
+    // Cancela una fecha futuro (baja lógica) y reembolsa sus reservas. Solo el dueño de la experiencia o un ADMIN.
     @DeleteMapping("/{sessionId}")
     public ResponseEntity<Void> deleteSession(
             @PathVariable Long sessionId,

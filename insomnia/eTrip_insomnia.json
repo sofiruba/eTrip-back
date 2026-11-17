@@ -1,15 +1,15 @@
 {
   "_type": "export",
   "__export_format": 4,
-  "__export_date": "2026-09-01T12:00:00.000Z",
+  "__export_date": "2026-11-17T12:00:00.000Z",
   "__export_source": "insomnia.desktop.app:v2023.5.8",
   "resources": [
     {
       "_id": "wrk_etrip",
       "_type": "workspace",
       "parentId": null,
-      "name": "eTrip API",
-      "description": "TPO eTrip - UADE. Base http://localhost:4002",
+      "name": "PLAN API",
+      "description": "Todos los endpoints de PLAN. Ver ENDPOINTS.md.",
       "scope": "collection"
     },
     {
@@ -20,7 +20,7 @@
       "data": {
         "base_url": "http://localhost:4002",
         "token": "",
-        "user_id": 1
+        "user_id": ""
       },
       "dataPropertyOrder": {
         "&": [
@@ -39,7 +39,7 @@
       "data": {
         "base_url": "http://localhost:4002",
         "token": "",
-        "user_id": 1
+        "user_id": ""
       },
       "dataPropertyOrder": {
         "&": [
@@ -54,75 +54,17 @@
       "_id": "fld_auth",
       "_type": "request_group",
       "parentId": "wrk_etrip",
-      "name": "01 - Auth",
-      "metaSortKey": -2000,
-      "description": "Las clases/entidades del backend estan en ingles (consigna de la materia / convencion del proyecto base). Glosario rapido: Booking = Reserva/Voucher · Order = Orden/Comprobante de compra (agrupa las Bookings de un mismo checkout) · Cart/CartItem = Carrito/Item del carrito · Experience = Experiencia (el 'producto') · ExperienceSession = Sesion/Turno · ExperienceCategory = Categoria · DiscountCoupon = Cupon de descuento · Review = Reseña · User = Usuario."
+      "name": "01 - Auth (público)",
+      "metaSortKey": 1
     },
     {
-      "_id": "req_auth_register",
+      "_id": "req_002",
       "_type": "request",
       "parentId": "fld_auth",
-      "name": "POST register (crea la cuenta sin verificar y manda un código al email)",
-      "method": "POST",
-      "url": "{{ _.base_url }}/api/v1/auth/register",
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"username\": \"nachoc\",\n  \"firstname\": \"Nacho\",\n  \"lastname\": \"Cortes\",\n  \"email\": \"nacho@etrip.com\",\n  \"password\": \"nacho1234\"\n}"
-      },
-      "metaSortKey": -2000
-    },
-    {
-      "_id": "req_auth_verify_email",
-      "_type": "request",
-      "parentId": "fld_auth",
-      "name": "POST verify-email (código del mail -> access_token)",
-      "method": "POST",
-      "url": "{{ _.base_url }}/api/v1/auth/verify-email",
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"usernameOrEmail\": \"nacho@etrip.com\",\n  \"code\": \"123456\"\n}"
-      },
-      "metaSortKey": -1999.6,
-      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
-    },
-    {
-      "_id": "req_auth_resend_verification",
-      "_type": "request",
-      "parentId": "fld_auth",
-      "name": "POST resend-verification (manda otro código; 204)",
-      "method": "POST",
-      "url": "{{ _.base_url }}/api/v1/auth/resend-verification",
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"usernameOrEmail\": \"nacho@etrip.com\"\n}"
-      },
-      "metaSortKey": -1999.5
-    },
-    {
-      "_id": "req_auth_login",
-      "_type": "request",
-      "parentId": "fld_auth",
-      "name": "POST authenticate (usernameOrEmail + password -> access_token)",
+      "name": "Login compradora de demo (sofia)",
       "method": "POST",
       "url": "{{ _.base_url }}/api/v1/auth/authenticate",
+      "metaSortKey": 2,
       "headers": [
         {
           "name": "Content-Type",
@@ -131,135 +73,362 @@
       ],
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"usernameOrEmail\": \"nacho@etrip.com\",\n  \"password\": \"nacho1234\"\n}"
+        "text": "{\n  \"usernameOrEmail\": \"sofia@plan.com\",\n  \"password\": \"plan1234\"\n}"
       },
-      "metaSortKey": -1999,
       "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
     },
     {
-      "_id": "fld_cats",
-      "_type": "request_group",
-      "parentId": "wrk_etrip",
-      "name": "03 - Categorias",
-      "metaSortKey": -1900
-    },
-    {
-      "_id": "req_cat_list",
+      "_id": "req_003",
       "_type": "request",
-      "parentId": "fld_cats",
-      "name": "GET categorias",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experience-categories?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1900
-    },
-    {
-      "_id": "req_cat_get",
-      "_type": "request",
-      "parentId": "fld_cats",
-      "name": "GET categoria por id",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experience-categories/1",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1899
-    },
-    {
-      "_id": "req_cat_create",
-      "_type": "request",
-      "parentId": "fld_cats",
-      "name": "POST crear categoria",
+      "parentId": "fld_auth",
+      "name": "Login anfitrión (marcos)",
       "method": "POST",
-      "url": "{{ _.base_url }}/experience-categories",
+      "url": "{{ _.base_url }}/api/v1/auth/authenticate",
+      "metaSortKey": 3,
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"marcos@plan.com\",\n  \"password\": \"plan1234\"\n}"
+      },
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
+    },
+    {
+      "_id": "req_004",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login admin",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/authenticate",
+      "metaSortKey": 4,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"admin@plan.com\",\n  \"password\": \"admin123\"\n}"
+      },
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
+    },
+    {
+      "_id": "req_005",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Registro (queda sin verificar, llega un código)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/register",
+      "metaSortKey": 5,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"username\": \"nueva.cuenta\",\n  \"firstname\": \"Nueva\",\n  \"lastname\": \"Cuenta\",\n  \"email\": \"nueva@example.com\",\n  \"password\": \"prueba123\",\n  \"interests\": [\n    \"Vinos\",\n    \"Senderismo\"\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_006",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Verificar el email (código del mail)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/verify-email",
+      "metaSortKey": 6,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"nueva@example.com\",\n  \"code\": \"123456\"\n}"
+      },
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
+    },
+    {
+      "_id": "req_007",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Reenviar código de verificación",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/resend-verification",
+      "metaSortKey": 7,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"nueva@example.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_008",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "¿Usuario / email libres?",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/auth/availability?username=nueva.cuenta&email=nueva@example.com",
+      "metaSortKey": 8
+    },
+    {
+      "_id": "req_009",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Olvidé mi contraseña",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/forgot-password",
+      "metaSortKey": 9,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"sofia@plan.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_010",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Revisar código de recuperación",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/verify-reset-code",
+      "metaSortKey": 10,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"sofia@plan.com\",\n  \"code\": \"123456\"\n}"
+      }
+    },
+    {
+      "_id": "req_011",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Cambiar contraseña con el código",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/reset-password",
+      "metaSortKey": 11,
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"usernameOrEmail\": \"sofia@plan.com\",\n  \"code\": \"123456\",\n  \"newPassword\": \"plan1234\"\n}"
+      },
+      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
+    },
+    {
+      "_id": "fld_users",
+      "_type": "request_group",
+      "parentId": "wrk_etrip",
+      "name": "02 - Usuarios",
+      "metaSortKey": 12
+    },
+    {
+      "_id": "req_013",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Mi perfil",
+      "method": "GET",
+      "url": "{{ _.base_url }}/users/me",
+      "metaSortKey": 13,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_014",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Editar mi perfil",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/users/me",
+      "metaSortKey": 14,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"bio\": \"Me encanta caminar y probar vinos.\",\n  \"city\": \"Mendoza\",\n  \"interests\": [\n    \"Vinos\",\n    \"Senderismo\",\n    \"Fotografía\"\n  ]\n}"
+      }
+    },
+    {
+      "_id": "req_015",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Perfil público",
+      "method": "GET",
+      "url": "{{ _.base_url }}/users/2",
+      "metaSortKey": 15
+    },
+    {
+      "_id": "req_016",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Todos los usuarios (ADMIN)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/users",
+      "metaSortKey": 16,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_017",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Cambiar rol (ADMIN)",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/users/3/role?role=ADMIN",
+      "metaSortKey": 17,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_018",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Desactivar / reactivar (ADMIN)",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/users/3/status?active=false",
+      "metaSortKey": 18,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "fld_catalog",
+      "_type": "request_group",
+      "parentId": "wrk_etrip",
+      "name": "03 - Catálogo",
+      "metaSortKey": 19
+    },
+    {
+      "_id": "req_020",
+      "_type": "request",
+      "parentId": "fld_catalog",
+      "name": "Categorías",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experience-categories",
+      "metaSortKey": 20
+    },
+    {
+      "_id": "req_021",
+      "_type": "request",
+      "parentId": "fld_catalog",
+      "name": "Crear categoría (ADMIN)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/experience-categories",
+      "metaSortKey": 21,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
       "body": {
         "mimeType": "application/json",
         "text": "{\n  \"name\": \"Tours urbanos\",\n  \"description\": \"Recorridos guiados por la ciudad\"\n}"
-      },
-      "metaSortKey": -1898
+      }
     },
     {
-      "_id": "req_cat_update",
+      "_id": "req_022",
       "_type": "request",
-      "parentId": "fld_cats",
-      "name": "PUT actualizar categoria",
+      "parentId": "fld_catalog",
+      "name": "Editar categoría (ADMIN)",
       "method": "PUT",
       "url": "{{ _.base_url }}/experience-categories/1",
+      "metaSortKey": 22,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"name\": \"Tours urbanos y culturales\",\n  \"description\": \"Recorridos guiados por la ciudad y museos\"\n}"
-      },
-      "metaSortKey": -1897
+        "text": "{\n  \"name\": \"Aventura y naturaleza\",\n  \"description\": \"Trekking, cerros y lagos\"\n}"
+      }
     },
     {
-      "_id": "req_cat_delete",
+      "_id": "req_023",
       "_type": "request",
-      "parentId": "fld_cats",
-      "name": "DELETE categoria",
+      "parentId": "fld_catalog",
+      "name": "Borrar categoría (ADMIN)",
       "method": "DELETE",
-      "url": "{{ _.base_url }}/experience-categories/1",
+      "url": "{{ _.base_url }}/experience-categories/99",
+      "metaSortKey": 23,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1896
+      }
     },
     {
-      "_id": "fld_interests",
-      "_type": "request_group",
-      "parentId": "wrk_etrip",
-      "name": "03 bis - Intereses (GET público | POST-PUT-DELETE: ADMIN)",
-      "metaSortKey": -1899.5
-    },
-    {
-      "_id": "req_int_list",
+      "_id": "req_024",
       "_type": "request",
-      "parentId": "fld_interests",
-      "name": "GET intereses (con planes disponibles)",
+      "parentId": "fld_catalog",
+      "name": "Intereses",
       "method": "GET",
       "url": "{{ _.base_url }}/interests",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1
+      "metaSortKey": 24
     },
     {
-      "_id": "req_int_create",
+      "_id": "req_025",
       "_type": "request",
-      "parentId": "fld_interests",
-      "name": "POST interés (ADMIN)",
+      "parentId": "fld_catalog",
+      "name": "Crear interés (ADMIN)",
       "method": "POST",
       "url": "{{ _.base_url }}/interests",
+      "metaSortKey": 25,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
-      "metaSortKey": 0,
       "headers": [
         {
           "name": "Content-Type",
@@ -272,17 +441,17 @@
       }
     },
     {
-      "_id": "req_int_update",
+      "_id": "req_026",
       "_type": "request",
-      "parentId": "fld_interests",
-      "name": "PUT interés (ADMIN)",
+      "parentId": "fld_catalog",
+      "name": "Editar interés (ADMIN)",
       "method": "PUT",
       "url": "{{ _.base_url }}/interests/1",
+      "metaSortKey": 26,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
-      "metaSortKey": 1,
       "headers": [
         {
           "name": "Content-Type",
@@ -295,58 +464,118 @@
       }
     },
     {
-      "_id": "req_int_delete",
+      "_id": "req_027",
       "_type": "request",
-      "parentId": "fld_interests",
-      "name": "DELETE interés (ADMIN)",
+      "parentId": "fld_catalog",
+      "name": "Borrar interés (ADMIN)",
       "method": "DELETE",
-      "url": "{{ _.base_url }}/interests/1",
+      "url": "{{ _.base_url }}/interests/99",
+      "metaSortKey": 27,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_028",
+      "_type": "request",
+      "parentId": "fld_catalog",
+      "name": "Monedas",
+      "method": "GET",
+      "url": "{{ _.base_url }}/currencies",
+      "metaSortKey": 28
+    },
+    {
+      "_id": "req_029",
+      "_type": "request",
+      "parentId": "fld_catalog",
+      "name": "Cambiar cotización (ADMIN)",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/currencies/USD",
+      "metaSortKey": 29,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
-      "metaSortKey": 2
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"arsPerUnit\": 1450\n}"
+      }
     },
     {
       "_id": "fld_exp",
       "_type": "request_group",
       "parentId": "wrk_etrip",
       "name": "04 - Experiencias",
-      "metaSortKey": -1800
+      "metaSortKey": 30
     },
     {
-      "_id": "req_exp_list",
+      "_id": "req_031",
       "_type": "request",
       "parentId": "fld_exp",
-      "name": "GET experiencias (filtros opcionales)",
+      "name": "Catálogo",
       "method": "GET",
-      "url": "{{ _.base_url }}/experiences?page=0&size=10&categoryId=&title=",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1800
+      "url": "{{ _.base_url }}/experiences",
+      "metaSortKey": 31
     },
     {
-      "_id": "req_exp_get",
+      "_id": "req_032",
       "_type": "request",
       "parentId": "fld_exp",
-      "name": "GET experiencia por id",
+      "name": "Búsqueda con filtros",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experiences?location=Bariloche&categoryId=1&minPrice=10000&maxPrice=90000&guests=2&onlyAvailable=true&tags=Senderismo",
+      "metaSortKey": 32
+    },
+    {
+      "_id": "req_033",
+      "_type": "request",
+      "parentId": "fld_exp",
+      "name": "Detalle",
       "method": "GET",
       "url": "{{ _.base_url }}/experiences/1",
+      "metaSortKey": 33
+    },
+    {
+      "_id": "req_034",
+      "_type": "request",
+      "parentId": "fld_exp",
+      "name": "Mis experiencias",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experiences/mine",
+      "metaSortKey": 34,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1799
+      }
     },
     {
-      "_id": "req_exp_create",
+      "_id": "req_035",
       "_type": "request",
       "parentId": "fld_exp",
-      "name": "POST crear experiencia (multipart: experience + una o mas 'images')",
+      "name": "Para vos (recomendaciones)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experiences/recommended?viewed=1,5",
+      "metaSortKey": 35,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_036",
+      "_type": "request",
+      "parentId": "fld_exp",
+      "name": "Publicar (multipart: elegir la foto a mano)",
       "method": "POST",
       "url": "{{ _.base_url }}/experiences",
+      "metaSortKey": 36,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
@@ -355,735 +584,803 @@
         "mimeType": "multipart/form-data",
         "params": [
           {
-            "id": "p_exp_json",
             "name": "experience",
             "type": "text",
-            "value": "{\"title\":\"City tour Buenos Aires\",\"description\":\"Recorrido guiado por el centro historico\",\"price\":25000.00,\"location\":\"Buenos Aires\",\"categoryId\":1}",
-            "contentType": "application/json"
+            "value": "{\"title\": \"Atardecer en kayak\", \"description\": \"Remamos por el río al atardecer con un guía local. Incluye equipo y mate.\", \"price\": 25000, \"location\": \"Tigre, Buenos Aires\", \"categoryId\": 2, \"adultsOnly\": false, \"tags\": [\"Canotaje\", \"Naturaleza\"]}"
           },
           {
-            "id": "p_exp_img1",
             "name": "images",
             "type": "file",
-            "value": "",
             "fileName": ""
           }
         ]
-      },
-      "metaSortKey": -1798,
-      "description": "IMPORTANTE: en la fila 'images' hace click en el icono de archivo y elegi una foto real de tu disco antes de mandar el request -- un file-field vacio hace que Insomnia no pueda enviar el request (no es un error del backend). Si queres mandar mas de 1 foto, duplica la fila 'images' (mismo nombre) con el boton '+' del form."
+      }
     },
     {
-      "_id": "req_exp_update",
+      "_id": "req_037",
       "_type": "request",
       "parentId": "fld_exp",
-      "name": "PUT actualizar experiencia ('images' opcional: si viene, reemplaza todas las fotos)",
-      "method": "PUT",
-      "url": "{{ _.base_url }}/experiences/1",
+      "name": "Descuento",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/experiences/1/discount",
+      "metaSortKey": 37,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
       "body": {
-        "mimeType": "multipart/form-data",
-        "params": [
-          {
-            "id": "p_exp_json_u",
-            "name": "experience",
-            "type": "text",
-            "value": "{\"title\":\"City tour Buenos Aires (full day)\",\"description\":\"Recorrido guiado extendido\",\"price\":32000.00,\"location\":\"Buenos Aires\",\"categoryId\":1}",
-            "contentType": "application/json"
-          },
-          {
-            "id": "p_exp_img_u",
-            "name": "images",
-            "type": "file",
-            "value": "",
-            "fileName": "",
-            "disabled": true
-          }
-        ]
-      },
-      "metaSortKey": -1797
+        "mimeType": "application/json",
+        "text": "{\n  \"discountPercentage\": 15\n}"
+      }
     },
     {
-      "_id": "req_exp_delete",
+      "_id": "req_038",
       "_type": "request",
       "parentId": "fld_exp",
-      "name": "DELETE experiencia",
-      "method": "DELETE",
-      "url": "{{ _.base_url }}/experiences/1",
+      "name": "Pausar / publicar",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/experiences/1/status?active=false",
+      "metaSortKey": 38,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1796
+      }
+    },
+    {
+      "_id": "req_039",
+      "_type": "request",
+      "parentId": "fld_exp",
+      "name": "Dar de baja",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/experiences/99",
+      "metaSortKey": 39,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
     },
     {
       "_id": "fld_ses",
       "_type": "request_group",
       "parentId": "wrk_etrip",
-      "name": "05 - Sesiones",
-      "metaSortKey": -1700
+      "name": "05 - Fechas",
+      "metaSortKey": 40
     },
     {
-      "_id": "req_ses_list",
+      "_id": "req_041",
       "_type": "request",
       "parentId": "fld_ses",
-      "name": "GET sesiones (experienceId opcional)",
+      "name": "Fechas públicas",
       "method": "GET",
-      "url": "{{ _.base_url }}/experience-sessions?page=0&size=10&experienceId=",
+      "url": "{{ _.base_url }}/experience-sessions?onlyAvailable=true",
+      "metaSortKey": 41
+    },
+    {
+      "_id": "req_042",
+      "_type": "request",
+      "parentId": "fld_ses",
+      "name": "Fechas de una experiencia",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experience-sessions/experience/1",
+      "metaSortKey": 42
+    },
+    {
+      "_id": "req_043",
+      "_type": "request",
+      "parentId": "fld_ses",
+      "name": "Mis fechas (calendario)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experience-sessions/manage",
+      "metaSortKey": 43,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1700
+      }
     },
     {
-      "_id": "req_ses_by_exp",
+      "_id": "req_044",
       "_type": "request",
       "parentId": "fld_ses",
-      "name": "GET sesiones por experiencia",
+      "name": "Resumen por experiencia (Fechas y huéspedes)",
       "method": "GET",
-      "url": "{{ _.base_url }}/experience-sessions/experience/1?page=0&size=10",
+      "url": "{{ _.base_url }}/experience-sessions/manage/summary",
+      "metaSortKey": 44,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1699
+      }
     },
     {
-      "_id": "req_ses_get",
+      "_id": "req_045",
       "_type": "request",
       "parentId": "fld_ses",
-      "name": "GET sesion por id",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experience-sessions/1",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1698
-    },
-    {
-      "_id": "req_ses_create",
-      "_type": "request",
-      "parentId": "fld_ses",
-      "name": "POST crear sesion",
+      "name": "Nueva fecha",
       "method": "POST",
       "url": "{{ _.base_url }}/experience-sessions",
+      "metaSortKey": 45,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"experienceId\": 1,\n  \"startsAt\": \"2026-10-15T10:00:00\",\n  \"endsAt\": \"2026-10-15T13:00:00\",\n  \"capacity\": 20\n}"
-      },
-      "metaSortKey": -1697
+        "text": "{\n  \"experienceId\": 1,\n  \"startsAt\": \"2027-03-20T10:00:00\",\n  \"endsAt\": \"2027-03-20T13:00:00\",\n  \"capacity\": 12\n}"
+      }
     },
     {
-      "_id": "req_ses_update",
+      "_id": "req_046",
       "_type": "request",
       "parentId": "fld_ses",
-      "name": "PUT actualizar sesion (campos opcionales)",
+      "name": "Editar fecha",
       "method": "PUT",
       "url": "{{ _.base_url }}/experience-sessions/1",
+      "metaSortKey": 46,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"startsAt\": \"2026-10-16T09:00:00\",\n  \"endsAt\": \"2026-10-16T12:00:00\",\n  \"capacity\": 25\n}"
-      },
-      "metaSortKey": -1696
+        "text": "{\n  \"experienceId\": 1,\n  \"startsAt\": \"2027-03-20T10:00:00\",\n  \"endsAt\": \"2027-03-20T13:00:00\",\n  \"capacity\": 15\n}"
+      }
     },
     {
-      "_id": "req_ses_delete",
+      "_id": "req_047",
       "_type": "request",
       "parentId": "fld_ses",
-      "name": "DELETE sesion",
+      "name": "Cancelar fecha (reembolsa)",
       "method": "DELETE",
       "url": "{{ _.base_url }}/experience-sessions/1",
+      "metaSortKey": 47,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1695
+      }
     },
     {
-      "_id": "fld_rev",
-      "_type": "request_group",
-      "parentId": "wrk_etrip",
-      "name": "06 - Resenias",
-      "metaSortKey": -1600
-    },
-    {
-      "_id": "req_rev_list",
+      "_id": "req_048",
       "_type": "request",
-      "parentId": "fld_rev",
-      "name": "GET resenias",
-      "method": "GET",
-      "url": "{{ _.base_url }}/reviews?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1600
-    },
-    {
-      "_id": "req_rev_by_exp",
-      "_type": "request",
-      "parentId": "fld_rev",
-      "name": "GET resenias por experiencia",
-      "method": "GET",
-      "url": "{{ _.base_url }}/reviews/experience/1?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1599
-    },
-    {
-      "_id": "req_rev_get",
-      "_type": "request",
-      "parentId": "fld_rev",
-      "name": "GET resenia por id",
-      "method": "GET",
-      "url": "{{ _.base_url }}/reviews/1",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1598
-    },
-    {
-      "_id": "req_rev_create",
-      "_type": "request",
-      "parentId": "fld_rev",
-      "name": "POST crear resenia (1 por usuario/experiencia, rating 1-5)",
-      "method": "POST",
-      "url": "{{ _.base_url }}/reviews",
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"experienceId\": 1,\n  \"rating\": 5,\n  \"comment\": \"Excelente experiencia, muy recomendable\"\n}"
-      },
-      "metaSortKey": -1597
-    },
-    {
-      "_id": "req_rev_delete",
-      "_type": "request",
-      "parentId": "fld_rev",
-      "name": "DELETE resenia (autor o ADMIN)",
+      "parentId": "fld_ses",
+      "name": "Borrar fecha cancelada o pasada",
       "method": "DELETE",
-      "url": "{{ _.base_url }}/reviews/1",
+      "url": "{{ _.base_url }}/experience-sessions/1/permanent",
+      "metaSortKey": 48,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1596
+      }
     },
     {
-      "_id": "fld_cart",
+      "_id": "req_049",
+      "_type": "request",
+      "parentId": "fld_ses",
+      "name": "Mi lista de espera",
+      "method": "GET",
+      "url": "{{ _.base_url }}/experience-sessions/waitlist/mine",
+      "metaSortKey": 49,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_050",
+      "_type": "request",
+      "parentId": "fld_ses",
+      "name": "Anotarme en lista de espera",
+      "method": "POST",
+      "url": "{{ _.base_url }}/experience-sessions/1/waitlist",
+      "metaSortKey": 50,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_051",
+      "_type": "request",
+      "parentId": "fld_ses",
+      "name": "Bajarme de la lista de espera",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/experience-sessions/1/waitlist",
+      "metaSortKey": 51,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "fld_buy",
       "_type": "request_group",
       "parentId": "wrk_etrip",
-      "name": "07 - Carrito",
-      "metaSortKey": -1500
+      "name": "06 - Compra",
+      "metaSortKey": 52
     },
     {
-      "_id": "req_cart_get",
+      "_id": "req_053",
       "_type": "request",
-      "parentId": "fld_cart",
-      "name": "GET carrito por usuario",
+      "parentId": "fld_buy",
+      "name": "Mi carrito",
       "method": "GET",
       "url": "{{ _.base_url }}/carts/user/{{ _.user_id }}",
+      "metaSortKey": 53,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1500
+      }
     },
     {
-      "_id": "req_cart_add",
+      "_id": "req_054",
       "_type": "request",
-      "parentId": "fld_cart",
-      "name": "POST agregar item al carrito (userId opcional, se toma del token si no lo mandas)",
+      "parentId": "fld_buy",
+      "name": "Agregar al carrito",
       "method": "POST",
       "url": "{{ _.base_url }}/carts/items",
+      "metaSortKey": 54,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"experienceSessionId\": 1,\n  \"quantity\": 2\n}"
-      },
-      "metaSortKey": -1499
+        "text": "{\n  \"experienceSessionId\": 10,\n  \"quantity\": 2\n}"
+      }
     },
     {
-      "_id": "req_cart_patch",
+      "_id": "req_055",
       "_type": "request",
-      "parentId": "fld_cart",
-      "name": "PATCH cambiar cantidad de un item",
+      "parentId": "fld_buy",
+      "name": "Cambiar cantidad",
       "method": "PATCH",
-      "url": "{{ _.base_url }}/carts/user/{{ _.user_id }}/items/1?quantity=3",
+      "url": "{{ _.base_url }}/carts/user/{{ _.user_id }}/items/1?quantity=1",
+      "metaSortKey": 55,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1498
+      }
     },
     {
-      "_id": "req_cart_del_item",
+      "_id": "req_056",
       "_type": "request",
-      "parentId": "fld_cart",
-      "name": "DELETE item del carrito",
+      "parentId": "fld_buy",
+      "name": "Quitar ítem",
       "method": "DELETE",
       "url": "{{ _.base_url }}/carts/user/{{ _.user_id }}/items/1",
+      "metaSortKey": 56,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1497
+      }
     },
     {
-      "_id": "req_cart_clear",
+      "_id": "req_057",
       "_type": "request",
-      "parentId": "fld_cart",
-      "name": "DELETE vaciar carrito",
+      "parentId": "fld_buy",
+      "name": "Vaciar carrito",
       "method": "DELETE",
       "url": "{{ _.base_url }}/carts/user/{{ _.user_id }}",
+      "metaSortKey": 57,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1496
+      }
     },
     {
-      "_id": "fld_ord",
-      "_type": "request_group",
-      "parentId": "wrk_etrip",
-      "name": "08 - Ordenes",
-      "metaSortKey": -1400
-    },
-    {
-      "_id": "req_ord_list",
+      "_id": "req_058",
       "_type": "request",
-      "parentId": "fld_ord",
-      "name": "GET ordenes (propias; ADMIN ve todas)",
+      "parentId": "fld_buy",
+      "name": "Validar cupón",
       "method": "GET",
-      "url": "{{ _.base_url }}/orders?page=0&size=10",
+      "url": "{{ _.base_url }}/discount-coupons/validate?code=BIENVENIDA15",
+      "metaSortKey": 58,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1400
+      }
     },
     {
-      "_id": "req_ord_get",
+      "_id": "req_059",
       "_type": "request",
-      "parentId": "fld_ord",
-      "name": "GET orden por id",
-      "method": "GET",
-      "url": "{{ _.base_url }}/orders/1",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1399
-    },
-    {
-      "_id": "req_ord_create",
-      "_type": "request",
-      "parentId": "fld_ord",
-      "name": "POST checkout (toma el carrito del usuario; body opcional)",
+      "parentId": "fld_buy",
+      "name": "Pagar (checkout)",
       "method": "POST",
       "url": "{{ _.base_url }}/orders",
+      "metaSortKey": 59,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"couponCode\": \"BIENVENIDA15\",\n  \"paymentMethod\": \"card\",\n  \"cardNumber\": \"4242 4242 4242 4242\"\n}"
+      }
+    },
+    {
+      "_id": "req_060",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Pagar como regalo",
+      "method": "POST",
+      "url": "{{ _.base_url }}/orders",
+      "metaSortKey": 60,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
       },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"couponCode\": \"VERANO2026\"\n}"
+        "text": "{\n  \"paymentMethod\": \"card\",\n  \"cardNumber\": \"4242 4242 4242 4242\",\n  \"gift\": {\n    \"recipientName\": \"Tomás\",\n    \"recipientEmail\": \"tomas@plan.com\",\n    \"message\": \"¡Feliz cumple!\"\n  }\n}"
+      }
+    },
+    {
+      "_id": "req_061",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Pago rechazado (tarjeta de prueba)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/orders",
+      "metaSortKey": 61,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
       },
-      "metaSortKey": -1398
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"paymentMethod\": \"card\",\n  \"cardNumber\": \"4000 0000 0000 0002\"\n}"
+      }
+    },
+    {
+      "_id": "req_062",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Mis órdenes",
+      "method": "GET",
+      "url": "{{ _.base_url }}/orders",
+      "metaSortKey": 62,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_063",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Una orden",
+      "method": "GET",
+      "url": "{{ _.base_url }}/orders/1",
+      "metaSortKey": 63,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_064",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Regalo pendiente: corregir email",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/orders/1/gift",
+      "metaSortKey": 64,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"recipientEmail\": \"tomas@plan.com\"\n}"
+      }
+    },
+    {
+      "_id": "req_065",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Regalo pendiente: me lo quedo",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/orders/1/gift",
+      "metaSortKey": 65,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_066",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Estadísticas (ADMIN)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/orders/stats",
+      "metaSortKey": 66,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_067",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Cancelar orden (ADMIN)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/orders/1/cancel",
+      "metaSortKey": 67,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_068",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Cupones (ADMIN)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/discount-coupons",
+      "metaSortKey": 68,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_069",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Crear cupón (ADMIN)",
+      "method": "POST",
+      "url": "{{ _.base_url }}/discount-coupons",
+      "metaSortKey": 69,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"code\": \"VERANO10\",\n  \"percentage\": 10,\n  \"validFrom\": \"2026-12-01T00:00:00\",\n  \"validUntil\": \"2027-03-01T23:59:00\",\n  \"active\": true\n}"
+      }
+    },
+    {
+      "_id": "req_070",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Editar cupón (ADMIN)",
+      "method": "PUT",
+      "url": "{{ _.base_url }}/discount-coupons/1",
+      "metaSortKey": 70,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"code\": \"BIENVENIDA15\",\n  \"percentage\": 15,\n  \"validFrom\": \"2026-01-01T00:00:00\",\n  \"validUntil\": \"2027-12-31T23:59:00\",\n  \"active\": true\n}"
+      }
+    },
+    {
+      "_id": "req_071",
+      "_type": "request",
+      "parentId": "fld_buy",
+      "name": "Borrar / desactivar cupón (ADMIN)",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/discount-coupons/99",
+      "metaSortKey": 71,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
     },
     {
       "_id": "fld_book",
       "_type": "request_group",
       "parentId": "wrk_etrip",
-      "name": "09 - Reservas",
-      "metaSortKey": -1300
+      "name": "07 - Reservas",
+      "metaSortKey": 72
     },
     {
-      "_id": "req_book_list",
+      "_id": "req_073",
       "_type": "request",
       "parentId": "fld_book",
-      "name": "GET reservas (propias; ADMIN ve todas)",
+      "name": "Mis reservas",
       "method": "GET",
-      "url": "{{ _.base_url }}/bookings?page=0&size=10",
+      "url": "{{ _.base_url }}/bookings",
+      "metaSortKey": 73,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1300
+      }
     },
     {
-      "_id": "req_book_get",
+      "_id": "req_074",
       "_type": "request",
       "parentId": "fld_book",
-      "name": "GET reserva por id",
+      "name": "Una reserva",
       "method": "GET",
       "url": "{{ _.base_url }}/bookings/1",
+      "metaSortKey": 74,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1299
+      }
     },
     {
-      "_id": "fld_coup",
+      "_id": "req_075",
+      "_type": "request",
+      "parentId": "fld_book",
+      "name": "Voucher (imagen PNG)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/bookings/1/voucher",
+      "metaSortKey": 75,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_076",
+      "_type": "request",
+      "parentId": "fld_book",
+      "name": "Cancelar con reembolso",
+      "method": "POST",
+      "url": "{{ _.base_url }}/bookings/1/refund",
+      "metaSortKey": 76,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_077",
+      "_type": "request",
+      "parentId": "fld_book",
+      "name": "Ventas de mis experiencias (anfitrión)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/bookings/sales",
+      "metaSortKey": 77,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_078",
+      "_type": "request",
+      "parentId": "fld_book",
+      "name": "Reservas de una experiencia (anfitrión)",
+      "method": "GET",
+      "url": "{{ _.base_url }}/bookings/experience/1",
+      "metaSortKey": 78,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "fld_after",
       "_type": "request_group",
       "parentId": "wrk_etrip",
-      "name": "10 - Cupones (GET: CLIENTE/ADMIN | POST-PUT-DELETE: ADMIN)",
-      "metaSortKey": -1200
+      "name": "08 - Reseñas, guardados y avisos",
+      "metaSortKey": 79
     },
     {
-      "_id": "req_coup_list",
+      "_id": "req_080",
       "_type": "request",
-      "parentId": "fld_coup",
-      "name": "GET cupones",
+      "parentId": "fld_after",
+      "name": "Reseñas de una experiencia",
       "method": "GET",
-      "url": "{{ _.base_url }}/discount-coupons?page=0&size=10",
+      "url": "{{ _.base_url }}/reviews/experience/1",
+      "metaSortKey": 80
+    },
+    {
+      "_id": "req_081",
+      "_type": "request",
+      "parentId": "fld_after",
+      "name": "Mis reseñas",
+      "method": "GET",
+      "url": "{{ _.base_url }}/reviews/mine",
+      "metaSortKey": 81,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1200
+      }
     },
     {
-      "_id": "req_coup_get",
+      "_id": "req_082",
       "_type": "request",
-      "parentId": "fld_coup",
-      "name": "GET cupon por id",
+      "parentId": "fld_after",
+      "name": "Todas las reseñas (ADMIN)",
       "method": "GET",
-      "url": "{{ _.base_url }}/discount-coupons/1",
+      "url": "{{ _.base_url }}/reviews",
+      "metaSortKey": 82,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1199
+      }
     },
     {
-      "_id": "req_coup_create",
+      "_id": "req_083",
       "_type": "request",
-      "parentId": "fld_coup",
-      "name": "POST crear cupon (ADMIN)",
+      "parentId": "fld_after",
+      "name": "Reseñar",
       "method": "POST",
-      "url": "{{ _.base_url }}/discount-coupons",
+      "url": "{{ _.base_url }}/reviews",
+      "metaSortKey": 83,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"code\": \"VERANO2026\",\n  \"percentage\": 15,\n  \"validFrom\": \"2026-09-01T00:00:00\",\n  \"validUntil\": \"2026-12-31T23:59:59\",\n  \"active\": true\n}"
-      },
-      "metaSortKey": -1198
+        "text": "{\n  \"experienceId\": 1,\n  \"rating\": 5,\n  \"comment\": \"Un plan buenísimo, el guía sabía muchísimo.\"\n}"
+      }
     },
     {
-      "_id": "req_coup_update",
+      "_id": "req_084",
       "_type": "request",
-      "parentId": "fld_coup",
-      "name": "PUT actualizar cupon (ADMIN)",
+      "parentId": "fld_after",
+      "name": "Responder reseña (anfitrión)",
       "method": "PUT",
-      "url": "{{ _.base_url }}/discount-coupons/1",
+      "url": "{{ _.base_url }}/reviews/1/reply",
+      "metaSortKey": 84,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
       "headers": [
         {
           "name": "Content-Type",
           "value": "application/json"
         }
       ],
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
       "body": {
         "mimeType": "application/json",
-        "text": "{\n  \"percentage\": 20,\n  \"active\": false\n}"
-      },
-      "metaSortKey": -1197
+        "text": "{\n  \"reply\": \"¡Gracias por venir!\"\n}"
+      }
     },
     {
-      "_id": "req_coup_delete",
+      "_id": "req_085",
       "_type": "request",
-      "parentId": "fld_coup",
-      "name": "DELETE cupon (ADMIN; si fue usado se desactiva)",
+      "parentId": "fld_after",
+      "name": "Borrar reseña",
       "method": "DELETE",
-      "url": "{{ _.base_url }}/discount-coupons/1",
+      "url": "{{ _.base_url }}/reviews/1",
+      "metaSortKey": 85,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1196
+      }
     },
     {
-      "_id": "req_auth_login_username",
+      "_id": "req_086",
       "_type": "request",
-      "parentId": "fld_auth",
-      "name": "POST authenticate (con username en vez de email)",
+      "parentId": "fld_after",
+      "name": "Mis guardados",
+      "method": "GET",
+      "url": "{{ _.base_url }}/favorites",
+      "metaSortKey": 86,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_087",
+      "_type": "request",
+      "parentId": "fld_after",
+      "name": "Guardar",
       "method": "POST",
-      "url": "{{ _.base_url }}/api/v1/auth/authenticate",
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"usernameOrEmail\": \"nachoc\",\n  \"password\": \"nacho1234\"\n}"
-      },
-      "metaSortKey": -1998,
-      "afterResponseScript": "// Guarda token y user_id automaticamente apenas llega la respuesta, asi no\n// hay que copiar/pegar nada a mano en el Environment despues de cada login.\n// Si el request fallo (400/403/etc) el body no tiene access_token y no se\n// toca lo que ya estaba guardado.\nconst body = insomnia.response.json();\nif (body && body.access_token) {\n  insomnia.environment.set('token', body.access_token);\n\n  // El id del usuario no viene en el body de /register ni /authenticate, pero\n  // si viaja como claim 'id' adentro del JWT (ver JwtService.buildToken), asi\n  // que lo sacamos de ahi sin tener que pegarle a /users/me aparte.\n  try {\n    const payloadB64 = body.access_token.split('.')[1];\n    const normalized = payloadB64.replace(/-/g, '+').replace(/_/g, '/');\n    const payload = JSON.parse(decodeURIComponent(atob(normalized).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));\n    if (payload && payload.id !== undefined) {\n      insomnia.environment.set('user_id', payload.id);\n    }\n  } catch (e) {\n    // si cambia el formato del token en algun momento, no rompemos el resto\n  }\n}\n"
+      "url": "{{ _.base_url }}/favorites/5",
+      "metaSortKey": 87,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
     },
     {
-      "_id": "fld_users",
-      "_type": "request_group",
-      "parentId": "wrk_etrip",
-      "name": "02 - Usuarios y Perfil",
-      "metaSortKey": -1950
-    },
-    {
-      "_id": "req_users_me_get",
+      "_id": "req_088",
       "_type": "request",
-      "parentId": "fld_users",
-      "name": "GET mi perfil (con contadores)",
+      "parentId": "fld_after",
+      "name": "Quitar de guardados",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/favorites/5",
+      "metaSortKey": 88,
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      }
+    },
+    {
+      "_id": "req_089",
+      "_type": "request",
+      "parentId": "fld_after",
+      "name": "Mis avisos",
       "method": "GET",
-      "url": "{{ _.base_url }}/users/me",
+      "url": "{{ _.base_url }}/notifications",
+      "metaSortKey": 89,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1950
+      }
     },
     {
-      "_id": "req_users_me_update",
+      "_id": "req_090",
       "_type": "request",
-      "parentId": "fld_users",
-      "name": "PUT editar mi nombre/apellido",
-      "method": "PUT",
-      "url": "{{ _.base_url }}/users/me",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"firstName\": \"Nacho\",\n  \"lastName\": \"Cortes\"\n}"
-      },
-      "metaSortKey": -1949
-    },
-    {
-      "_id": "req_users_by_id",
-      "_type": "request",
-      "parentId": "fld_users",
-      "name": "GET perfil publico de otro usuario",
-      "method": "GET",
-      "url": "{{ _.base_url }}/users/1",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1948
-    },
-    {
-      "_id": "req_users_list",
-      "_type": "request",
-      "parentId": "fld_users",
-      "name": "GET lista de usuarios (ADMIN)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/users?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1947
-    },
-    {
-      "_id": "req_users_role",
-      "_type": "request",
-      "parentId": "fld_users",
-      "name": "PATCH asignar permisos/rol (ADMIN)",
+      "parentId": "fld_after",
+      "name": "Marcar aviso como leído",
       "method": "PATCH",
-      "url": "{{ _.base_url }}/users/2/role?role=ADMIN",
+      "url": "{{ _.base_url }}/notifications/1/read",
+      "metaSortKey": 90,
       "authentication": {
         "type": "bearer",
         "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1946
-    },
-    {
-      "_id": "req_exp_discount",
-      "_type": "request",
-      "parentId": "fld_exp",
-      "name": "PATCH gestionar descuento individual (dueño o ADMIN)",
-      "method": "PATCH",
-      "url": "{{ _.base_url }}/experiences/1/discount",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "headers": [
-        {
-          "name": "Content-Type",
-          "value": "application/json"
-        }
-      ],
-      "body": {
-        "mimeType": "application/json",
-        "text": "{\n  \"discountPercentage\": 20\n}"
-      },
-      "metaSortKey": -1797
-    },
-    {
-      "_id": "req_exp_filters",
-      "_type": "request",
-      "parentId": "fld_exp",
-      "name": "GET experiencias - filtros avanzados (categoria/precio/ubicacion/fecha/ofertas)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experiences?categoryId=&title=&location=Palermo&minPrice=1000&maxPrice=50000&publisherId=&onlyDiscounted=true&dateFrom=2027-01-01&dateTo=2027-12-31&guests=2&timeSlots=tarde,noche&withKids=true",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1796
-    },
-    {
-      "_id": "req_exp_mine",
-      "_type": "request",
-      "parentId": "fld_exp",
-      "name": "GET mis experiencias publicadas (modo vendedor)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experiences/mine?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1795
-    },
-    {
-      "_id": "req_exp_recommended",
-      "_type": "request",
-      "parentId": "fld_exp",
-      "name": "GET recomendadas para mí (\"Para vos\")",
-      "method": "GET",
-      "url": "{{ _.base_url }}/experiences/recommended?viewed=1,2",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1950
-    },
-    {
-      "_id": "req_book_sales",
-      "_type": "request",
-      "parentId": "fld_book",
-      "name": "GET modo vendedor: reservas de mis experiencias (con comprador)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/bookings/sales?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1298
-    },
-    {
-      "_id": "req_book_by_exp",
-      "_type": "request",
-      "parentId": "fld_book",
-      "name": "GET reservas de una experiencia (dueño o ADMIN)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/bookings/experience/1?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1297
-    },
-    {
-      "_id": "req_coup_validate",
-      "_type": "request",
-      "parentId": "fld_coup",
-      "name": "GET validar cupon antes de pagar (siempre 200: valid true/false + reason)",
-      "method": "GET",
-      "url": "{{ _.base_url }}/discount-coupons/validate?code=PROMO10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1201
-    },
-    {
-      "_id": "req_rev_mine",
-      "_type": "request",
-      "parentId": "fld_rev",
-      "name": "GET mis reseñas",
-      "method": "GET",
-      "url": "{{ _.base_url }}/reviews/mine?page=0&size=10",
-      "authentication": {
-        "type": "bearer",
-        "token": "{{ _.token }}"
-      },
-      "metaSortKey": -1595
+      }
     }
   ]
 }

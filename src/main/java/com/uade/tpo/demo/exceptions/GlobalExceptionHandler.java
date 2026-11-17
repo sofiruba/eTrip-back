@@ -3,20 +3,23 @@ package com.uade.tpo.demo.exceptions;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.mail.MailException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
-// Intercepta las excepciones propias del proyecto para que el mensaje de cada
-// "throw" (el que le pasamos nosotros al crear la excepcion) sea el que ve el
-// cliente, en vez de un texto generico fijo por tipo de excepcion.
+// Todos los errores salen con el mismo formato { status, message }, con un mensaje que el front puede mostrar:
+// 400 regla de negocio o dato inválido, 401 sin sesión o login incorrecto, 403 sin permiso, 404 no existe.
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -79,15 +82,39 @@ public class GlobalExceptionHandler {
     }
 
     // Cualquier error no previsto: se loguea y se responde con un mensaje entendible (nunca "No message available").
+    // Un parámetro con un tipo que no corresponde (por ejemplo /bookings/abc)
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        return error(HttpStatus.BAD_REQUEST, "El valor de \"" + ex.getName() + "\" no es válido");
+    }
+
+    // El cuerpo del pedido no es un JSON válido o no tiene el formato esperado
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+        return error(HttpStatus.BAD_REQUEST, "Los datos enviados no tienen un formato válido");
+    }
+
+    // Fotos más pesadas que el máximo permitido
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleUploadSize(MaxUploadSizeExceededException ex) {
+        return error(HttpStatus.PAYLOAD_TOO_LARGE, "Las fotos pesan demasiado: cada una puede pesar hasta 5 MB");
+    }
+
+    // Cualquier otro error: los propios de Spring conservan su código con un mensaje en castellano;
+    // los no previstos se loguean y responden 500 con un mensaje entendible.
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
-        // Los errores propios de Spring (404 de ruta, body mal formado, etc.) mantienen su código
         if (ex instanceof org.springframework.web.ErrorResponse springError) {
             HttpStatus status = HttpStatus.valueOf(springError.getStatusCode().value());
-            return error(status, springError.getBody().getDetail() != null ? springError.getBody().getDetail() : status.getReasonPhrase());
-        }
-        if (ex instanceof org.springframework.http.converter.HttpMessageNotReadableException) {
-            return error(HttpStatus.BAD_REQUEST, "El cuerpo de la solicitud no es válido");
+            return error(status, switch (status) {
+                case NOT_FOUND -> "Esa dirección no existe en la API";
+                case METHOD_NOT_ALLOWED -> "Ese método no está permitido en esta dirección";
+                case UNSUPPORTED_MEDIA_TYPE -> "El formato de los datos enviados no es el esperado";
+                case BAD_REQUEST -> ex instanceof MissingServletRequestParameterException missing
+                        ? "Falta el dato \"" + missing.getParameterName() + "\""
+                        : "La solicitud no es válida";
+                default -> "No se pudo procesar la solicitud";
+            });
         }
         log.error("Error inesperado", ex);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "Ocurrió un error inesperado. Probá de nuevo en unos minutos.");

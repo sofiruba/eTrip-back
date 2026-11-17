@@ -5,15 +5,16 @@ import java.util.Date;
 import java.util.function.Function;
 
 import javax.crypto.SecretKey;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
+
+import com.uade.tpo.demo.entity.User;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.userdetails.UserDetails;
-
-import com.uade.tpo.demo.entity.User;
 
 @Service
 public class JwtService {
@@ -33,7 +34,7 @@ public class JwtService {
                 .builder()
                 .subject(user.getUsername()) // email (UserDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
-                // id del usuario, para que un cliente (front, Insomnia) lo pueda leer
+                // id del usuario, para que el cliente lo pueda leer sin pedir /users/me
                 // del token sin tener que pegarle a /users/me aparte.
                 .claim("id", user.getId())
                 .expiration(new Date(System.currentTimeMillis() + expiration))

@@ -12,7 +12,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -22,8 +21,8 @@ import java.util.Set;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
-import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageReader;
+import javax.imageio.ImageWriteParam;
 import javax.imageio.ImageWriter;
 import javax.imageio.stream.ImageInputStream;
 import javax.imageio.stream.ImageOutputStream;
@@ -42,8 +41,8 @@ import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
 import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.ExperienceCategory;
-import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.ExperienceImage;
+import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Favorite;
 import com.uade.tpo.demo.entity.Interest;
 import com.uade.tpo.demo.entity.Review;
@@ -59,9 +58,9 @@ import com.uade.tpo.demo.repository.ExperienceRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.ExperienceSpecifications;
 import com.uade.tpo.demo.repository.FavoriteRepository;
-import com.uade.tpo.demo.repository.WaitlistRepository;
 import com.uade.tpo.demo.repository.ReviewRepository;
 import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.repository.WaitlistRepository;
 import com.uade.tpo.demo.service.ExperienceService;
 import com.uade.tpo.demo.service.InterestService;
 import com.uade.tpo.demo.service.NotificationService;
@@ -83,7 +82,7 @@ public class ExperienceServiceImpl implements ExperienceService {
     private static final int IMAGE_MAX_DIMENSION = 1600;
     // Calidad JPEG (0 a 1) usada al recomprimir las fotos subidas.
     private static final float IMAGE_JPEG_QUALITY = 0.75f;
-    // Mismos límites que el editor del front (PhotoPicker): hasta 5 fotos de hasta 5 MB.
+    // Hasta 5 fotos de hasta 5 MB cada una.
     private static final int MAX_IMAGES = 5;
     private static final long MAX_IMAGE_BYTES = 5L * 1024 * 1024;
     // Una foto de pocos KB puede declarar 30000x30000 px y pedir GB de memoria al decodificarla:
@@ -228,7 +227,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         return toResponse(experienceRepository.save(experience));
     }
 
-    // Cambia el descuento de la experiencia (0 <= x < 100). Solo el dueño o un ADMIN.
+    // Cambia el descuento de la experiencia (de 0 a 90 %). Solo el dueño o un ADMIN.
     @Override
     @Transactional(rollbackFor = Throwable.class)
     public ExperienceResponseDTO updateDiscount(Long experienceId, BigDecimal discountPercentage, User currentUser)
@@ -240,7 +239,7 @@ public class ExperienceServiceImpl implements ExperienceService {
         if (discountPercentage == null || discountPercentage.signum() == 0) {
             experience.setDiscountPercentage(null);
         } else {
-            // Mismo tope que el front (editor y DiscountModal)
+            // Tope del descuento: hasta 90 %
             if (discountPercentage.signum() < 0 || discountPercentage.compareTo(BigDecimal.valueOf(90)) > 0) {
                 throw new BadRequestException("El descuento tiene que estar entre 0 y 90%");
             }
@@ -287,14 +286,7 @@ public class ExperienceServiceImpl implements ExperienceService {
                 booking.setRefundedAt(now);
                 bookingRepository.save(booking);
                 refundedBookings++;
-                User buyer = booking.getOrder() != null ? booking.getOrder().getUser() : null;
-                notificationService.create(buyer, "Experiencia cancelada",
-                        "El anfitrión dio de baja \"" + experience.getTitle() + "\". Te reembolsamos tu reserva del "
-                                + session.getStartsAt().toLocalDate() + " (voucher " + booking.getVoucherCode() + ").");
-                if (booking.getRecipient() != null && (buyer == null || !booking.getRecipient().getId().equals(buyer.getId()))) {
-                    notificationService.create(booking.getRecipient(), "Experiencia cancelada",
-                            "\"" + experience.getTitle() + "\" fue dada de baja por su anfitrión: la reserva que te regalaron quedó sin efecto.");
-                }
+                notificationService.bookingCancelled(booking, "el anfitrión dio de baja la experiencia");
             }
             waitlistService.notifySessionCancelled(session);
             session.setActive(false);
@@ -396,8 +388,7 @@ public class ExperienceServiceImpl implements ExperienceService {
 
         // 2. Candidatas: lo mismo que muestra el catálogo con "solo con lugares", sin las propias ni las excluidas
         ExperienceSearchDTO onlyAvailable = ExperienceSearchDTO.builder().onlyAvailable(true).build();
-        List<RecommendationResponseDTO> scored = new ArrayList<>();
-        Map<Long, Integer> scores = new HashMap<>();
+        List<Scored> scored = new ArrayList<>();
         for (Experience candidate : experienceRepository.findAll(ExperienceSpecifications.withFilters(onlyAvailable, false, false))) {
             if (candidate.getPublisher().getId().equals(user.getId()) || excluded.contains(candidate.getId())) {
                 continue;
@@ -424,18 +415,28 @@ public class ExperienceServiceImpl implements ExperienceService {
                 }
             }
             if (score > 0) {
-                scores.put(candidate.getId(), score);
-                scored.add(RecommendationResponseDTO.builder().experience(toListResponse(candidate)).reason(reason).build());
+                scored.add(new Scored(candidate, score, averageRating(candidate), reason));
             }
         }
 
-        // 3. Las de más puntos primero; si empatan, la mejor puntuada por las reseñas
+        // 3. Las de más puntos primero (si empatan, la mejor puntuada); recién ahí se arman las 8 tarjetas con su foto
         return scored.stream()
-                .sorted(Comparator.comparing((RecommendationResponseDTO r) -> scores.get(r.getExperience().getId())).reversed()
-                        .thenComparing(r -> r.getExperience().getAverageRating() != null ? r.getExperience().getAverageRating() : 0.0,
-                                Comparator.reverseOrder()))
+                .sorted(Comparator.comparingInt(Scored::score).thenComparingDouble(Scored::rating).reversed())
                 .limit(MAX_RECOMMENDATIONS)
+                .map(entry -> RecommendationResponseDTO.builder()
+                        .experience(toListResponse(entry.experience()))
+                        .reason(entry.reason())
+                        .build())
                 .toList();
+    }
+
+    /** Una candidata a recomendar con su puntaje y el motivo. */
+    private record Scored(Experience experience, int score, double rating, String reason) {
+    }
+
+    private double averageRating(Experience experience) {
+        return experience.getReviews() == null ? 0
+                : experience.getReviews().stream().mapToInt(Review::getRating).average().orElse(0);
     }
 
     private void addSource(Map<Long, TasteSource> sources, TasteSource source) {

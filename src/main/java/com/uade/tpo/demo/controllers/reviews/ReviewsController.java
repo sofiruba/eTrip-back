@@ -34,8 +34,8 @@ public class ReviewsController {
 
     private final ReviewService reviewService;
 
-    // Listado general de reseñas: CLIENTE ve solo las propias, ADMIN ve todas. Para las de un
-    // producto puntual (públicas) usar /reviews/experience/{id}.
+    // Reseñas: un CLIENTE ve solo las propias y un ADMIN, todas. Las de una experiencia (públicas)
+    // están en /reviews/experience/{id}.
     @GetMapping
     public ResponseEntity<Page<ReviewResponseDTO>> getReviews(
             @RequestParam(required = false) Integer page,

@@ -26,4 +26,6 @@ public class ExperienceSessionResponseDTO {
     private boolean editable;
     /** Personas anotadas para que les avisen si se libera un lugar. */
     private long waitlistCount;
+    /** Hasta cuándo quien compre esta fecha la puede cancelar con reembolso (48 h antes de que empiece). */
+    private LocalDateTime refundableUntil;
 }

@@ -36,5 +36,5 @@ build/
 logs/
 .DS_Store
 
-### Credenciales (mail) ###
-.env
+### Configuración local (credenciales) ###
+**/.env

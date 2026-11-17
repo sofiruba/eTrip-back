@@ -19,4 +19,8 @@ public class DiscountCouponResponseDTO {
     private LocalDateTime validFrom;
     private LocalDateTime validUntil;
     private Boolean active;
+    /** Lo calcula el back: ACTIVE, INACTIVE, NOT_YET_VALID o EXPIRED. */
+    private String status;
+    /** En cuántas compras se usó (un cupón usado no se borra: se desactiva). */
+    private long usedCount;
 }

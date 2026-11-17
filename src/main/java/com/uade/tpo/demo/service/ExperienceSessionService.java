@@ -15,7 +15,7 @@ import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
 public interface ExperienceSessionService {
-    // Lista turnos con filtros opcionales combinables: experiencia, solo con cupo, rango de fechas.
+    // Lista fechas con filtros opcionales combinables: experiencia, solo con cupo, rango de fechas.
     Page<ExperienceSessionResponseDTO> searchSessions(
             Long experienceId, Boolean onlyAvailable, LocalDateTime dateFrom, LocalDateTime dateTo, Pageable pageable)
             throws ResourceNotFoundException;
@@ -26,18 +26,18 @@ public interface ExperienceSessionService {
     // "Fechas y huéspedes": un resumen por cada experiencia del anfitrión
     List<HostAgendaItemDTO> getHostAgenda(User currentUser);
 
-    // Un turno puntual por id.
+    // Una fecha puntual por id.
     ExperienceSessionResponseDTO getSessionById(Long sessionId) throws ResourceNotFoundException;
 
-    // Crea un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
+    // Crea una fecha. Solo el dueño (publisher) de la experiencia o un ADMIN.
     ExperienceSessionResponseDTO createSession(ExperienceSessionRequestDTO request, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
-    // Edita un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
+    // Edita una fecha. Solo el dueño (publisher) de la experiencia o un ADMIN.
     ExperienceSessionResponseDTO updateSession(Long sessionId, ExperienceSessionRequestDTO request, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
-    // Da de baja logicamente un turno. Solo el dueño (publisher) de la experiencia o un ADMIN.
+    // Da de baja lógicamente una fecha. Solo el dueño (publisher) de la experiencia o un ADMIN.
     void deleteSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 

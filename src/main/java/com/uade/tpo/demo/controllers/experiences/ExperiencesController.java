@@ -31,6 +31,7 @@ import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
+import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -90,12 +91,12 @@ public class ExperiencesController {
                 .tags(tags)
                 .build();
         boolean canIncludeInactive = includeInactive && currentUser != null
-                && (currentUser.getRole() == com.uade.tpo.demo.entity.Role.ADMIN
-                        || (currentUser.getRole() == com.uade.tpo.demo.entity.Role.CLIENTE
+                && (currentUser.getRole() == Role.ADMIN
+                        || (currentUser.getRole() == Role.CLIENTE
                                 && publisherId != null
                                 && currentUser.getId().equals(publisherId)));
         // Las eliminadas solo las ve el admin, en su panel (includeInactive): para todos los demás no existen
-        boolean includeDeleted = canIncludeInactive && currentUser.getRole() == com.uade.tpo.demo.entity.Role.ADMIN;
+        boolean includeDeleted = canIncludeInactive && currentUser.getRole() == Role.ADMIN;
         return ResponseEntity.ok(
                 experienceService.searchExperiences(filter, pageRequest(page, size), canIncludeInactive, includeDeleted));
     }
@@ -165,7 +166,7 @@ public class ExperiencesController {
         }
     }
 
-    // Cambia el descuento de la experiencia (0 <= x < 100). Solo el dueño o un ADMIN.
+    // Cambia el descuento de la experiencia (de 0 a 90 %). Solo el dueño o un ADMIN.
     @PatchMapping("/{experienceId}/discount")
     public ResponseEntity<ExperienceResponseDTO> updateDiscount(
             @PathVariable Long experienceId,

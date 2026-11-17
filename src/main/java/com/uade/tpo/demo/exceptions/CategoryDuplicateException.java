@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 @ResponseStatus(code = HttpStatus.BAD_REQUEST)
 public class CategoryDuplicateException extends Exception {
     public CategoryDuplicateException() {
-        super("La categoria que se intenta agregar esta duplicada");
+        super("Ya existe una categoría con ese nombre");
     }
 
     public CategoryDuplicateException(String message) {

@@ -1,410 +1,114 @@
-# eTrip — Backend
+# PLAN · API (back)
 
-Marketplace de experiencias turísticas locales (clases de cocina, tours, caminatas urbanas,
-eventos gastronómicos), estilo Airbnb Experiences. TPO grupal de Aplicaciones Interactivas
-(UADE, 2º cuatrimestre 2026).
+API REST de **PLAN**, un marketplace de experiencias con gente local: cualquiera puede publicar un plan
+(una caminata, una clase de cocina, una peña) con fechas y cupos, y cualquiera puede reservarlo.
 
-La consigna original de la cátedra es un e-commerce genérico; se adaptó al dominio de
-experiencias turísticas.
+- **Stack:** Java 17, Spring Boot 3.1 (Web, Data JPA, Security, Mail), JWT, MySQL 8, Lombok.
+- **Arquitectura:** `controllers` (HTTP) → `service` (reglas de negocio) → `repository` (JPA) → `entity`. Los datos
+  viajan con DTOs (`dtos/request`, `dtos/response`) y los errores con un formato único `{ status, message }`.
+- **Front:** carpeta `eTrip-front` (React + Redux Toolkit).
+- **Todos los endpoints**, con ejemplos: [`insomnia/ENDPOINTS.md`](insomnia/ENDPOINTS.md). Colección para Insomnia:
+  [`insomnia/eTrip_insomnia.json`](insomnia/eTrip_insomnia.json).
 
-## Flujo
+## Cómo levantarlo
 
-```
-Usuario → Carrito → Confirmación de reserva → Bookings / Vouchers
-```
-
-Un usuario publica una **experiencia** dentro de una **categoría**. Cada experiencia tiene
-**sesiones/turnos** (fecha, capacidad, cupos). Otro usuario arma un **carrito** con sesiones,
-opcionalmente aplica un **cupón de descuento**, y al confirmar se generan las **reservas
-(bookings)** con su voucher, descontando los cupos.
-
-`Order` existe como entidad interna que agrupa los vouchers de una compra; de cara al usuario
-no hay un paso separado de "orden".
-
-## Stack
-
-- Java 17 + Spring Boot 3.1.11
-- Spring Data JPA / Hibernate
-- MySQL 8
-- Spring Security + JWT
-- Lombok
-- Maven (wrapper incluido: `./mvnw`)
-
-## Arquitectura
-
-- `Controller → Service → Repository`. Sin lógica de negocio en los controllers.
-- Validación manual en los `*ServiceImpl` (sin `spring-boot-starter-validation`).
-- Los endpoints exponen DTOs de request/response, nunca entidades.
-- Inyección de dependencias por constructor (`@RequiredArgsConstructor`).
-- Excepciones checked con `@ResponseStatus`: `ResourceNotFoundException` (404),
-  `BadRequestException` (400), `ForbiddenException` (403), `CategoryDuplicateException` (400).
-- Roles: enum `Role` (`CLIENTE`, `ADMIN`). Autorización por ruta en `SecurityConfig`
-  (`hasAnyAuthority`); reglas de dueño / auto-asignación en el service.
-- Paginación con `Page`/`PageRequest`; sin `page`/`size` devuelve todo en una página.
-
-## Modelo de dominio
-
-| Entidad | Tabla | Campos clave | Relaciones |
-|---|---|---|---|
-| `User` | `user` | `email` (único), `displayUsername` (columna `username`, único), `password`, `firstName`, `lastName`, `role` | 1—N `Experience` (publisher), 1—N `Order`, 1—1 `Cart` |
-| `ExperienceCategory` | `experience_categories` | `name` (único), `description` | 1—N `Experience` |
-| `Experience` | `experiences` | `title`, `description`, `price`, `discountPercentage` (nullable), `location` | N—1 `ExperienceCategory`, N—1 `User` (publisher), 1—N `ExperienceImage`, 1—N `ExperienceSession`, 1—N `Review` |
-| `ExperienceImage` | `experience_images` | `image` (`byte[]`/`LONGBLOB`), `position` | N—1 `Experience` |
-| `ExperienceSession` | `experience_sessions` | `startsAt`, `endsAt`, `capacity`, `availableSeats` | N—1 `Experience`, 1—N `Booking` |
-| `Cart` | `carts` | — | 1—1 `User`, 1—N `CartItem` |
-| `CartItem` | `cart_items` | `quantity` | N—1 `Cart`, N—1 `ExperienceSession` |
-| `DiscountCoupon` | `discount_coupons` | `code` (único), `percentage`, `validFrom`, `validUntil`, `active` | 1—N `Order` |
-| `Order` | `orders` | `createdAt`, `subtotal`, `discountAmount`, `total` | N—1 `User`, N—1 `DiscountCoupon` (opcional), 1—N `Booking` |
-| `Booking` | `bookings` | `voucherCode` (`ETRIP-XXXXXXXX`), `quantity`, `createdAt` | N—1 `Order`, N—1 `ExperienceSession` |
-| `Review` | `reviews` | `rating` (1-5), `comment`, `createdAt` | N—1 `User`, N—1 `Experience` |
-
-Notas:
-- Precio final: `Experience.getEffectivePrice()` (`price * (1 - discountPercentage/100)`). Lo usan
-  `ExperienceResponseDTO.finalPrice`, el carrito y el checkout.
-- `User.displayUsername` mapea a la columna `username`; el nombre del campo evita colisión con
-  `UserDetails.getUsername()` (que Spring Security usa y debe devolver el email).
-- `ExperienceImage` es una entidad aparte (`cascade = ALL, orphanRemoval = true`) porque una
-  experiencia puede tener una o más fotos.
-
-## Cómo correr
-
-1. MySQL 8 corriendo en `localhost:3306`.
-2. Crear la base:
-   ```sql
-   CREATE DATABASE etrip_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+1. **MySQL 8** corriendo en `localhost:3306` (la base `etrip_db` se crea sola).
+2. **Configuración local:** copiar `.env.example` como `.env` y completarlo. `.env` no se sube a git.
+   - `DB_PASSWORD` (y `DB_USER`, si no es `root`): el usuario de MySQL.
+   - `JWT_SECRET`: una clave larga y al azar para firmar los tokens (por ejemplo, `openssl rand -hex 64`).
+   - `MAIL_USERNAME` / `MAIL_PASSWORD`: una cuenta de Gmail con contraseña de aplicación. Si se deja vacío, los
+     mails no se mandan y su asunto (que lleva el código de verificación) se escribe en la consola del back.
+3. **Cargar los datos de ejemplo** (la primera vez; **borra todo lo que haya en la base**):
+   ```bash
+   ./mvnw spring-boot:run "-Dspring-boot.run.arguments=--app.seed=true"
    ```
-3. Ajustar usuario/contraseña en
-   [`src/main/resources/application.properties`](src/main/resources/application.properties), o
-   sobreescribir con variables de entorno `DB_USER` / `DB_PASSWORD` (también se pueden poner en `.env`).
-4. **Mails:** copiar `.env.example` como `.env` y completar `MAIL_PASSWORD` con la contraseña de aplicación de
-   `equipodeplan@gmail.com`. `.env` está en `.gitignore`: la clave nunca se sube. Sin `.env`, los códigos de
-   verificación y de recuperar contraseña se escriben en la consola del back.
-5. Levantar:
+   Después, cortarlo y levantarlo normal (sin el flag, o cada reinicio vuelve a borrar todo):
    ```bash
    ./mvnw spring-boot:run
    ```
-6. API en `http://localhost:4002`. Hibernate crea/actualiza las tablas al arrancar
-   (`spring.jpa.hibernate.ddl-auto=update`).
+4. La API queda en `http://localhost:4002`. Hibernate crea y actualiza las tablas al arrancar.
 
-### Cargar datos de ejemplo (borra todo)
+### Datos de ejemplo
 
-`DataSeeder` ([`seed/DataSeeder.java`](src/main/java/com/uade/tpo/demo/seed/DataSeeder.java)) es de **un solo uso**:
-solo corre si se arranca con `--app.seed=true`. **Vacía todas las tablas** y carga lo que hay en
-[`resources/seed/seed-data.json`](src/main/resources/seed/seed-data.json) con las fotos de `resources/seed/fotos`
-(créditos y licencias en [`CREDITOS-FOTOS.md`](src/main/resources/seed/CREDITOS-FOTOS.md)). Después la app sigue normal.
-
-```bash
-./mvnw spring-boot:run "-Dspring-boot.run.arguments=--app.seed=true"
-```
-
-Carga 7 categorías, 43 experiencias en 9 ciudades (con 1–2 fotos cada una), fechas pasadas y futuras, ~550 reservas
-(algunas reembolsadas, una fecha agotada y varias casi llenas), ~170 reseñas con respuestas del anfitrión y 5 cupones
-(`BIENVENIDA15`, `PLAN20`, `FINDE10`; `INVIERNO25` vencido y `PAUSADO30` desactivado). Cuentas:
+El seed (`seed/DataSeeder.java` + `resources/seed/seed-data.json`) carga 7 categorías con 27 intereses,
+43 experiencias en 9 ciudades con fotos (créditos en `resources/seed/CREDITOS-FOTOS.md`), fechas pasadas y futuras
+(una agotada, con lista de espera), ~500 reservas, ~170 reseñas, 5 cupones (`BIENVENIDA15`, `PLAN20`, `FINDE10`;
+`INVIERNO25` vencido y `PAUSADO30` desactivado), un regalo y 8 monedas.
 
 | Cuenta | Contraseña | Para qué |
 |---|---|---|
 | `admin@plan.com` | `admin123` | Panel de administración |
-| `sofia@plan.com` | `plan1234` | Demo del comprador: reservas próximas y pasadas, una experiencia sin reseñar |
-| `marcos@plan.com`, `florencia@plan.com`, … | `plan1234` | Anfitriones (emails en el JSON) |
+| `sofia@plan.com` | `plan1234` | Cuenta de demo: reservas próximas y pasadas sin reseñar, guardados, un regalo recibido. No usó ningún cupón |
+| `marcos@plan.com` (y el resto de los anfitriones de `seed-data.json`) | `plan1234` | Anfitriones |
+| `tomas@plan.com` (y el resto de los compradores) | `plan1234` | Compradores |
 
-Sin el flag no hace nada: se puede borrar la clase cuando ya no haga falta.
+Todas las cuentas del seed ya tienen el email verificado.
 
-### Autenticación
+## Seguridad
 
-```bash
-# Registro → { "email": "ana@test.com" } (sin token: llega un código de 6 dígitos al email)
-curl -X POST http://localhost:4002/api/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"anap","firstname":"Ana","lastname":"Perez","email":"ana@test.com","password":"pass1234"}'
+- **Registro con verificación del email:** la cuenta queda sin verificar y llega un código de 6 dígitos al mail. Sin
+  verificarlo no se puede iniciar sesión (el login responde 403 y manda un código nuevo).
+- **Recuperar contraseña** con un código por mail. Los códigos se guardan hasheados (como la contraseña), vencen a
+  los 15 minutos, se invalidan con 5 intentos fallidos y no se manda más de un mail por minuto a la misma cuenta.
+- **JWT** (24 h) en el header `Authorization: Bearer …`. El rol no viaja en el token: se lee de la base en cada
+  pedido, así que un cambio de rol o una cuenta desactivada se aplican enseguida.
+- **Roles:** `CLIENTE` (toda cuenta compra y vende) y `ADMIN` (modera; no compra). Para crear otro admin: un admin le
+  cambia el rol desde el panel (`PATCH /users/{id}/role`).
+- **Estados HTTP:** 200/201/204 si salió bien (una lista vacía es `200 []`, nunca 404); 400 regla de negocio o dato
+  inválido; 401 sin sesión o login incorrecto; 403 sin permiso o email sin verificar; 404 cuando se pide por id algo
+  que no existe; 503 si no se pudo mandar un mail. Siempre con `{ status, message }` en castellano.
 
-# Verificar el email con el código del mail
-curl -X POST http://localhost:4002/api/v1/auth/verify-email \
-  -H 'Content-Type: application/json' \
-  -d '{"usernameOrEmail":"ana@test.com","code":"123456"}'
+## Reglas de negocio
 
-# Login (usernameOrEmail acepta username o email). 403 si el email no está verificado
-curl -X POST http://localhost:4002/api/v1/auth/authenticate \
-  -H 'Content-Type: application/json' \
-  -d '{"usernameOrEmail":"ana@test.com","password":"pass1234"}'
-```
+**Experiencias y fechas**
+- Una experiencia tiene categoría, hasta 5 fotos, precio, descuento (0–90 %), hasta 8 intereses y fechas con cupo
+  (el stock). En el catálogo público solo aparecen las publicadas, con alguna fecha futura y de anfitriones activos.
+- El anfitrión puede pausarla (deja de verse) o darla de baja: se cancelan sus fechas futuras, se reembolsa a todos y
+  les llega un aviso. Si alguna vez se vendió, queda guardada como `DELETED` (solo la ve el admin).
+- A una fecha con reservas no se le puede cambiar el horario ni bajar el cupo por debajo de lo vendido. Cancelar una
+  fecha reembolsa sus reservas y avisa a compradores, a quienes recibieron un regalo y a la lista de espera.
 
-`verify-email` y `authenticate` devuelven `{ "access_token": "<JWT>" }`. Ese token va en el header
-`Authorization: Bearer <JWT>` en el resto de los endpoints. `register` siempre crea rol
-`CLIENTE`. Para tener un `ADMIN`: `UPDATE user SET role='ADMIN' WHERE email=...` en MySQL, o
-que otro ADMIN use `PATCH /users/{id}/role`.
+**Compra**
+- Carrito → checkout: el back valida lugares (bloqueando la fila para que dos compras no vendan el mismo lugar),
+  cupón, precio esperado y pago (simulado; la tarjeta `4000 0000 0000 0002` siempre se rechaza). Si algo falla, no
+  se cobra nada. Nadie puede comprar su propia experiencia; un admin no compra.
+- **Cupones:** un uso por persona (vuelve a estar disponible si esa orden se reembolsó entera). El descuento lo
+  **absorbe PLAN**: el anfitrión cobra sobre el precio de lista.
+- **Comisión de PLAN: 10 %**, incluida en el precio. Cada reserva informa lo pagado, lo que recibe el anfitrión y lo
+  que le queda a PLAN.
 
-## JWT y autenticación
+**Cancelaciones**
+- Quien tiene el voucher puede cancelar con reembolso total **hasta 48 h antes**; el anfitrión y el admin, hasta que
+  empiece. La plata vuelve siempre a quien pagó. Cada reserva dice si quien la mira la puede cancelar y hasta cuándo
+  (`refundable`, `refundableUntil`).
 
-| Archivo | Rol |
-|---|---|
-| `JwtService` | Genera y valida el JWT (HMAC-SHA, expira a las 24hs). |
-| `AuthenticationService` | `register`/`authenticate`/`verifyEmail`: valida datos, encripta password (BCrypt), manda y revisa los códigos (`VerificationCode`), pide el token. |
-| `MailService` | Manda los mails con el código (Gmail, `JavaMailSender`). |
-| `ApplicationConfig` | `UserDetailsService`, `AuthenticationProvider`, `PasswordEncoder`. |
-| `JwtAuthenticationFilter` | Corre en cada request: valida el token y carga el usuario en el `SecurityContext`. |
-| `SecurityConfig` | Rutas públicas y rol requerido por ruta. |
+**Regalos**
+- Se puede comprar para otra persona (nombre, email opcional y dedicatoria). Le llega un mail **sin el voucher**.
+- El regalo pasa a ser suyo **solo cuando tiene una cuenta verificada con ese email** (en el momento, si ya la tiene;
+  si no, cuando la crea y la verifica). Mientras tanto queda pendiente: el voucher es de quien pagó, que puede
+  corregir el email o quedárselo. Así, un email mal escrito no le regala el plan a otra persona.
+- Una vez entregado, el voucher es de quien lo recibió: lo ve, lo descarga, lo puede cancelar y reseña la
+  experiencia. Quien pagó deja de ver el código.
 
-Payload del JWT: `sub` (email), `id` (id numérico del usuario), `iat`/`exp`. El rol no viaja en
-el token — se relee de la base en cada request, así un cambio de rol aplica sin renovar token.
+**Reseñas, guardados, lista de espera y recomendaciones**
+- Reseña quien fue (tiene el voucher, no se canceló y la experiencia ya terminó), una vez por experiencia. El
+  anfitrión puede responder en público.
+- En una fecha agotada, cualquiera se anota en la lista de espera; si se libera un lugar, el back les avisa a todos.
+- **"Para vos":** el back puntúa el catálogo según los intereses de la persona, lo que guardó, lo que reservó y lo que
+  vio hace poco, y devuelve cada recomendación con su motivo.
+- **Monedas:** todo se cobra en pesos; las demás monedas son de referencia y el admin actualiza sus cotizaciones.
 
-El proyecto no tiene `AuthenticationEntryPoint` custom: token faltante, inválido, vencido, o rol
-insuficiente devuelven todos **403** (no hay 401 separado).
-
-## Módulos implementados
-
-| Módulo | Recursos | Estado |
-|---|---|---|
-| Catálogo | categorías, experiencias, fotos, descuento por producto | ✅ |
-| Sesiones / Turnos | cupos y horarios por experiencia | ✅ |
-| Carrito | armado del carrito, validación de stock | ✅ |
-| Reservas y cupones | checkout, vouchers, cupones de descuento globales | ✅ |
-| Usuarios y perfil | perfil propio/ajeno, administración de roles | ✅ |
-| Reseñas | rating + comentario por experiencia | ✅ |
-
-## Flujos principales
-
-**Anfitrión:**
-```
-register/authenticate → POST /experience-categories (si hace falta)
-  → POST /experiences (multipart, 1+ fotos) → PATCH /experiences/{id}/discount (opcional)
-  → POST /experience-sessions → GET /experiences/mine → GET /bookings/sales
-```
-
-**Comprador:**
-```
-register/authenticate → GET /experiences?...filtros → GET /experiences/{id}
-  → POST /carts/items → GET /discount-coupons/validate?code= (opcional)
-  → POST /orders (checkout) → GET /orders, GET /bookings → POST /reviews
-```
-
-**Administración:**
-```
-authenticate (usuario ADMIN) → GET /users → PATCH /users/{id}/role
-  → POST/PUT/DELETE /discount-coupons
-```
-
----
-
-## Endpoints — Categorías de experiencias
-
-Base: `/experience-categories` · Rol `CLIENTE` o `ADMIN`.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/experience-categories?page=&size=` | Lista paginada. Sin `page`/`size` devuelve todo. |
-| `GET` | `/experience-categories/{id}` | Categoría por id. `404` si no existe. |
-| `POST` | `/experience-categories` | Crea. Body: `{ "name", "description" }`. |
-| `PUT` | `/experience-categories/{id}` | Actualiza `name` / `description`. |
-| `DELETE` | `/experience-categories/{id}` | Elimina. `400` si tiene experiencias asociadas. |
-
-**Validaciones:** `name` obligatorio (`400`); `name` único → `400`.
-
-## Endpoints — Experiencias
-
-Base: `/experiences` · Rol `CLIENTE` o `ADMIN`.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/experiences?page=&size=&...` | Lista paginada con filtros (ver abajo). |
-| `GET` | `/experiences/mine?page=&size=` | Mis experiencias publicadas. |
-| `GET` | `/experiences/{id}` | Experiencia por id. `404` si no existe. |
-| `POST` | `/experiences` | `multipart/form-data`: parte `experience` (JSON) + una o más partes `images` (mínimo 1). |
-| `PUT` | `/experiences/{id}` | Actualiza. `images` opcional (si viene, reemplaza el set). Dueño o `ADMIN`. |
-| `PATCH` | `/experiences/{id}/discount` | Body: `{ "discountPercentage": 20 }`. `0 <= x < 100`. Dueño o `ADMIN`. |
-| `DELETE` | `/experiences/{id}` | Dueño o `ADMIN`. `400` si tiene sesiones asociadas. |
-
-**Filtros de `GET /experiences`** (opcionales, se combinan con AND):
-
-| Param | Efecto |
-|---|---|
-| `categoryId` | Categoría exacta. `404` si no existe. |
-| `title` | Cada palabra tiene que estar en el título, el lugar o el nombre del anfitrión (sin importar mayúsculas ni acentos). |
-| `location` | Coincidencia parcial en la ubicación. |
-| `minPrice` / `maxPrice` | Rango sobre el **precio final** (con descuento). `minPrice > maxPrice` → `400`. |
-| `publisherId` | Experiencias de un anfitrión puntual. |
-| `onlyDiscounted` | Solo con descuento de producto activo. |
-| `dateFrom` / `dateTo` | Días (`2027-01-31`): alguna fecha que empiece en ese rango. |
-| `guests` | Alguna fecha con al menos esos lugares libres. |
-| `onlyAvailable` | Alguna fecha con lugares libres. |
-| `durationMin` / `durationMax` | Duración de la fecha, en minutos. `durationMin > durationMax` → `400`. |
-| `timeSlots` | Franja de inicio, separadas por coma: `manana` (antes de las 12), `tarde` (12 a 17), `noche` (desde las 17). |
-| `withKids` | `true` = el grupo tiene niños o bebés: no muestra las experiencias solo para mayores de 18. |
-
-Fechas, personas, duración y horario se cumplen en **una misma fecha**. El catálogo público muestra solo experiencias publicadas con alguna fecha futura. Es toda la búsqueda del Home: el front solo ordena.
-
-**Body de `experience`:**
-```json
-{ "title": "Pastas caseras", "description": "Amasado y salsa", "price": 5000, "location": "Palermo, Buenos Aires", "categoryId": 1, "adultsOnly": false }
-```
-
-**Reglas:**
-- `title`, `price` > 0, `categoryId` obligatorios; al menos 1 foto → si no, `400`.
-- `title` único por publisher (no global) → `400`.
-- Categoría debe existir → `404`.
-- Publisher se toma del JWT, no del body.
-- Fotos se guardan como `byte[]` (comprimidas a JPEG antes de guardar) y viajan como Base64 en
-  `imagesBase64`.
-
-## Endpoints — Sesiones / Turnos
-
-Base: `/experience-sessions` · Rol `CLIENTE` o `ADMIN`.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/experience-sessions?page=&size=&experienceId=&onlyAvailable=&dateFrom=&dateTo=` | Lista con filtros combinables. |
-| `GET` | `/experience-sessions/experience/{experienceId}?onlyAvailable=` | Sesiones de una experiencia. |
-| `GET` | `/experience-sessions/{sessionId}` | Sesión por id. `404` si no existe. |
-| `POST` | `/experience-sessions` | Body: `{ "experienceId", "startsAt", "endsAt", "capacity" }`. |
-| `PUT` | `/experience-sessions/{sessionId}` | Actualiza (campos opcionales). |
-| `DELETE` | `/experience-sessions/{sessionId}` | `400` si tiene reservas o está en algún carrito. |
-
-**Reglas:** `startsAt` < `endsAt`, `startsAt` a futuro, `capacity` > 0, sin solapamiento de
-horario en la misma experiencia, no se puede bajar `capacity` debajo de lo ya reservado.
-`POST`/`PUT`/`DELETE`: solo el publisher de la experiencia o un `ADMIN`.
-
-## Endpoints — Carrito
-
-Base: `/carts` · Rol `CLIENTE` o `ADMIN`. `userId` se valida contra el usuario autenticado.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/carts/user/{userId}` | Trae el carrito; lo crea vacío la primera vez. |
-| `POST` | `/carts/items` | Body: `{ "userId"?, "experienceSessionId", "quantity" }`. Si `userId` no viene, se toma del token. |
-| `PATCH` | `/carts/user/{userId}/items/{cartItemId}?quantity=` | Fija la cantidad de un item. |
-| `DELETE` | `/carts/user/{userId}/items/{cartItemId}` | Elimina un item. |
-| `DELETE` | `/carts/user/{userId}` | Vacía el carrito. |
-
-**Reglas:** `quantity` > 0; no puede superar `availableSeats`; item ajeno → `403`. `unitPrice` /
-`subtotal` usan `Experience.getEffectivePrice()`.
-
-## Endpoints — Cupones de descuento
-
-Base: `/discount-coupons`.
-
-| Método | Ruta | Rol | Descripción |
-|---|---|---|---|
-| `GET` | `/discount-coupons?page=&size=` | CLIENTE / ADMIN | Lista cupones. |
-| `GET` | `/discount-coupons/validate?code=` | CLIENTE / ADMIN | Siempre `200`: `{ code, valid, reason, percentage }`. |
-| `GET` | `/discount-coupons/{id}` | CLIENTE / ADMIN | Cupón por id. `404` si no existe. |
-| `POST` | `/discount-coupons` | ADMIN | Body: `{ "code", "percentage", "validFrom?", "validUntil?", "active?" }`. |
-| `PUT` | `/discount-coupons/{id}` | ADMIN | Actualiza (campos opcionales). |
-| `DELETE` | `/discount-coupons/{id}` | ADMIN | Sin uso: borra. Ya usado: desactiva (`active=false`). |
-
-**Reglas:** `code` único (case-insensitive); `0 < percentage <= 100`; `validFrom` < `validUntil`
-si vienen ambas; un cupón se puede usar una sola vez por usuario.
-
-## Endpoints — Reservas (`/orders` y `/bookings`)
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `POST` | `/orders` | Confirma el carrito. Body opcional: `{ "couponCode" }`. |
-| `GET` | `/orders?page=&size=` | Mis órdenes (ADMIN ve todas). |
-| `GET` | `/orders/{orderId}` | Orden por id. `403` si no es propia ni ADMIN. |
-| `GET` | `/bookings?page=&size=` | Mis vouchers (ADMIN ve todos). |
-| `GET` | `/bookings/sales?page=&size=` | Reservas sobre mis experiencias publicadas. |
-| `GET` | `/bookings/experience/{experienceId}?page=&size=` | Reservas de una experiencia. Dueño o ADMIN. |
-| `GET` | `/bookings/{bookingId}` | Voucher por id. Comprador, dueño de la experiencia, o ADMIN. |
-
-**`POST /orders`:**
-1. Busca el carrito (`404` si no existe), valida que no esté vacío (`400`).
-2. Revalida `availableSeats` de cada sesión (`400` si no alcanza).
-3. Calcula `subtotal` con `Experience.getEffectivePrice()`.
-4. Si hay `couponCode`: valida vigencia y que no lo haya usado antes este usuario (`400`/`404`),
-   calcula `discountAmount`.
-5. `total = subtotal - discountAmount`.
-6. Crea `Order` + un `Booking` por item (`voucherCode` `ETRIP-XXXXXXXX`).
-7. Descuenta `availableSeats`, vacía el carrito.
-
-## Endpoints — Usuarios y perfil
-
-Base: `/users` · Requiere estar autenticado.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/users/me` | Mi perfil + contadores. |
-| `PUT` | `/users/me` | Edita `firstName`/`lastName`. |
-| `GET` | `/users/{id}` | Perfil de otro. Datos completos solo si sos vos o ADMIN. |
-| `GET` | `/users?page=&size=` | ADMIN: lista de usuarios. |
-| `PATCH` | `/users/{id}/role?role=CLIENTE\|ADMIN` | ADMIN: asigna rol. `403` si es tu propio rol. |
-
-## Endpoints — Reseñas
-
-Base: `/reviews` · Rol `CLIENTE` o `ADMIN`.
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/reviews?page=&size=` | CLIENTE: solo propias. ADMIN: todas. |
-| `GET` | `/reviews/experience/{experienceId}?page=&size=` | Reseñas de una experiencia (pública). |
-| `GET` | `/reviews/mine?page=&size=` | Mis reseñas. |
-| `GET` | `/reviews/{reviewId}` | Reseña por id. CLIENTE: solo si es autor. ADMIN: cualquiera. |
-| `POST` | `/reviews` | Body: `{ "experienceId", "rating", "comment" }`. |
-| `DELETE` | `/reviews/{reviewId}` | Autor o ADMIN. |
-
-**Reglas:** `rating` 1-5; una reseña por usuario y experiencia; requiere haber reservado esa
-experiencia antes; autor sale del token.
-
----
-
-## Reglas de negocio destacadas
-
-- Filtros combinables en `GET /experiences` (toda la búsqueda del catálogo, con AND).
-- `/orders` y `/bookings` filtran por JWT, no por parámetro de URL.
-- `/discount-coupons/validate` no gasta el cupón ni toca el carrito.
-- Sesión sin cupos → no se puede reservar/agregar al carrito.
-- Cupón vencido/inactivo/ya usado por ese usuario → `400`.
-- Categoría/experiencia/sesión con relaciones no se puede borrar → `400`.
-- Username y email únicos al registrarse.
-- Rol de ADMIN no se puede auto-asignar/auto-revocar.
-
-## Códigos de error
-
-| Código | Cuándo |
-|---|---|
-| `400` | Datos inválidos o duplicado (`BadRequestException`, `CategoryDuplicateException`). |
-| `403` | Recurso ajeno sin ser ADMIN, o token faltante/inválido/rol insuficiente. |
-| `404` | Recurso inexistente (`ResourceNotFoundException`). |
-
-## Qué falta
-
-- Sin tests automatizados.
-- No hay chequeo `publisher != buyer` en carrito/checkout.
-- Sin baja de cuenta.
-- Sin Swagger/OpenAPI.
-
-## Cambios recientes para el frontend
-
-- Los errores propios responden JSON con `{ "status": 400, "message": "..." }`, con un
-  mensaje específico para cada regla de negocio.
-- `DELETE /experience-sessions/{id}` realiza una baja lógica: la sesión conserva sus
-  reservas históricas, queda `active=false` y deja de aparecer en las búsquedas.
-- `PATCH /users/{id}/status?active=true|false` permite a un ADMIN activar o desactivar
-  usuarios. El usuario desactivado no puede autenticarse.
-- `POST /bookings/{id}/refund` permite al comprador o a un ADMIN solicitar un reembolso
-  total antes del inicio de la sesión. Marca el voucher como `refunded=true`, conserva
-  el historial y devuelve los cupos a la sesión.
-
-**Decisiones de diseño:**
-- Un solo rol de comprador/vendedor (`CLIENTE`), no roles separados.
-- Descuentos en dos niveles: por producto y por cupón global.
-- Sin pantalla de "orden de compra" separada del checkout.
-
-## Estructura del código
+## Estructura
 
 ```
-controllers/   REST controllers por recurso (auth, users, experiences, carts, orders, bookings, coupons, reviews, config)
-service/       Interfaces de servicio + paquete impl/ con la lógica de negocio
-repository/    Spring Data JPA (incluye Specifications para filtros dinámicos)
-entity/        Entidades JPA
-dtos/          request/ y response/, separados de las entidades
-exceptions/    BadRequestException, ForbiddenException, ResourceNotFoundException, CategoryDuplicateException
+src/main/java/com/uade/tpo/demo/
+  controllers/   un controller por recurso (auth, experiences, sessions, carts, orders, bookings, reviews, users,
+                 coupons, categories, interests, currencies, favorites, notifications) y config/ (seguridad, JWT,
+                 CORS, errores)
+  service/       interfaces + impl/ con las reglas de negocio; MailService y VoucherImageService (voucher en PNG)
+  repository/    Spring Data JPA (+ Specifications para la búsqueda del catálogo)
+  entity/        el modelo de la base
+  dtos/          request / response
+  exceptions/    excepciones propias + GlobalExceptionHandler
+  seed/          carga de datos de ejemplo (solo con --app.seed=true)
 ```
-
-## Puesta en marcha del proyecto base
-
-Cambios sobre el proyecto base de la cátedra antes de implementar los módulos propios:
-
-- Enum `Role`: `USER` → `CLIENTE`.
-- Fix en `CategoryServiceImpl.createCategory()` (lanzaba excepción siempre).
-- `User.lastName` tenía `unique = true` por error; se movió a `email`.
-- Imagen de experiencia: `tinyblob` → `LONGBLOB`.
-- `AuthenticationService.register` fuerza `Role.CLIENTE` (antes tomaba `role` del body).

@@ -19,7 +19,6 @@ import com.uade.tpo.demo.controllers.auth.RegisterResponse;
 import com.uade.tpo.demo.controllers.auth.ResetPasswordRequest;
 import com.uade.tpo.demo.controllers.auth.VerifyEmailRequest;
 import com.uade.tpo.demo.controllers.config.JwtService;
-import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.CodePurpose;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
@@ -27,9 +26,8 @@ import com.uade.tpo.demo.entity.VerificationCode;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
-import com.uade.tpo.demo.repository.BookingRepository;
-import com.uade.tpo.demo.repository.VerificationCodeRepository;
 import com.uade.tpo.demo.repository.UserRepository;
+import com.uade.tpo.demo.repository.VerificationCodeRepository;
 import com.uade.tpo.demo.service.impl.UserServiceImpl;
 
 import lombok.RequiredArgsConstructor;
@@ -52,8 +50,7 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
     private final MailService mailService;
     private final InterestService interestService;
-    private final BookingRepository bookingRepository;
-    private final NotificationService notificationService;
+    private final OrderService orderService;
 
     // Crea un usuario nuevo (siempre CLIENTE; los ADMIN se dan de alta a mano en la base) SIN verificar y le manda
     // por mail un código para confirmar que el email es suyo. Todavía no devuelve token: eso lo hace verifyEmail.
@@ -153,7 +150,7 @@ public class AuthenticationService {
         User user = checkCode(request.getUsernameOrEmail(), request.getCode(), CodePurpose.VERIFY_EMAIL);
         user.setEmailVerified(true);
         repository.save(user);
-        claimGifts(user);
+        orderService.claimPendingGifts(user);
         codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL);
         return AuthenticationResponse.builder()
                 .accessToken(jwtService.generateToken(user))
@@ -201,30 +198,13 @@ public class AuthenticationService {
         user.setEmailVerified(true);
         repository.save(user);
         if (!wasVerified) {
-            claimGifts(user);
+            orderService.claimPendingGifts(user);
         }
         codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.RESET_PASSWORD);
         codeRepository.deleteByUserIdAndPurpose(user.getId(), CodePurpose.VERIFY_EMAIL);
         return AuthenticationResponse.builder()
                 .accessToken(jwtService.generateToken(user))
                 .build();
-    }
-
-    // Regalos que le hicieron a este email antes de que tuviera cuenta: ahora que probó que el email es suyo
-    // (verificándolo), pasan a ser suyos y los ve en "Mis reservas".
-    private void claimGifts(User user) {
-        int claimed = 0;
-        for (Booking booking : bookingRepository.findByRecipientIsNullAndOrder_GiftRecipientEmailIgnoreCase(user.getEmail())) {
-            if (!booking.isRefunded() && !booking.getOrder().getUser().getId().equals(user.getId())) {
-                booking.setRecipient(user);
-                bookingRepository.save(booking);
-                claimed++;
-            }
-        }
-        if (claimed > 0) {
-            notificationService.create(user, "¡Tenés un regalo esperándote!",
-                    "Te regalaron " + (claimed == 1 ? "una experiencia" : claimed + " experiencias") + ". Ya está en tus reservas, con el voucher.");
-        }
     }
 
     // Genera un código de 6 dígitos, guarda su hash y lo manda por mail.

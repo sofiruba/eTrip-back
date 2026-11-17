@@ -1,4 +1,14 @@
 {
+  "currencies": [
+    { "code": "ARS", "name": "Peso argentino", "symbol": "$", "arsPerUnit": 1 },
+    { "code": "USD", "name": "Dólar estadounidense", "symbol": "US$", "arsPerUnit": 1450 },
+    { "code": "EUR", "name": "Euro", "symbol": "€", "arsPerUnit": 1700 },
+    { "code": "GBP", "name": "Libra esterlina", "symbol": "£", "arsPerUnit": 1950 },
+    { "code": "CHF", "name": "Franco suizo", "symbol": "CHF", "arsPerUnit": 1820 },
+    { "code": "BRL", "name": "Real brasileño", "symbol": "R$", "arsPerUnit": 270 },
+    { "code": "UYU", "name": "Peso uruguayo", "symbol": "$U", "arsPerUnit": 36 },
+    { "code": "CLP", "name": "Peso chileno", "symbol": "CLP$", "arsPerUnit": 1.55 }
+  ],
   "categories": [
     { "name": "Aventura y naturaleza", "description": "Trekking, paisajes, cerros, lagos y escapadas al aire libre.", "interests": ["Naturaleza", "Senderismo", "Caminata", "Camping"] },
     { "name": "Deportes y aire libre", "description": "Kayak, surf, bici, escalada y todo lo que se haga moviéndose.", "interests": ["Ciclismo", "Canotaje", "Natación", "Surf", "Vela"] },

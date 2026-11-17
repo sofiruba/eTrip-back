@@ -21,7 +21,7 @@ public interface OrderService {
 
     // Confirma el carrito del usuario y genera la orden con sus vouchers.
     OrderResponseDTO createOrder(User user, OrderRequestDTO request)
-            throws ResourceNotFoundException, BadRequestException;
+            throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
     // Estadísticas de ventas y comisión de PLAN; solo ADMIN.
     OrderStatsDTO getStats(User user) throws ForbiddenException;
@@ -33,6 +33,9 @@ public interface OrderService {
     // Regalo pendiente: quien pagó corrige el email (se vuelve a mandar la invitación)
     OrderResponseDTO updateGiftEmail(Long orderId, String recipientEmail, User user)
             throws ResourceNotFoundException, ForbiddenException, BadRequestException;
+
+    // Le entrega a este usuario los regalos pendientes a su email (cuando lo verifica o cuando se reactiva su cuenta)
+    void claimPendingGifts(User user);
 
     // Regalo pendiente: quien pagó se lo queda (pasan a ser reservas comunes suyas)
     OrderResponseDTO cancelGift(Long orderId, User user)

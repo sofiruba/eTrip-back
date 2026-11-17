@@ -27,7 +27,7 @@ public interface ExperienceService {
     // Una experiencia puntual por id (una pausada solo la ven su anfitrión y los administradores).
     ExperienceResponseDTO getExperienceById(Long experienceId, User currentUser) throws ResourceNotFoundException;
 
-    // "Para vos": recomendaciones según intereses, guardadas, reservas y vistas (viewedIds lo manda el front)
+    // "Para vos": recomendaciones según intereses, guardadas, reservas y vistas recientes (viewedIds)
     List<RecommendationResponseDTO> recommend(User currentUser, List<Long> viewedIds);
 
     // Crea una experiencia nueva con sus fotos.

@@ -1,11 +1,13 @@
 package com.uade.tpo.demo.controllers.config;
 
+import java.io.IOException;
 import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -18,9 +20,11 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import com.uade.tpo.demo.entity.Role;
 
-import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
+import jakarta.servlet.http.HttpServletResponse;
 
 import lombok.RequiredArgsConstructor;
+
+import static org.springframework.security.config.http.SessionCreationPolicy.STATELESS;
 
 @Configuration
 @EnableWebSecurity
@@ -47,12 +51,12 @@ public class SecurityConfig {
                                                 "/experience-sessions/manage", "/experience-sessions/manage/summary",
                                                 "/experience-sessions/waitlist/mine")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
-                                .requestMatchers(HttpMethod.GET, "/experiences/**", "/experience-categories/**", "/interests/**",
+                                .requestMatchers(HttpMethod.GET, "/experiences/**", "/experience-categories/**", "/interests/**", "/currencies/**",
                                                 "/experience-sessions/**", "/reviews/experience/**", "/users/*").permitAll()
                                                 .requestMatchers("/users/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
                                                 // Las categorías y los intereses se leen sin sesión (GET de arriba); crearlos, editarlos o borrarlos es del admin
-                                                .requestMatchers("/experience-categories/**", "/interests/**")
+                                                .requestMatchers("/experience-categories/**", "/interests/**", "/currencies/**")
                                                 .hasAnyAuthority(Role.ADMIN.name())
                                                 .requestMatchers("/experiences/**")
                                                 .hasAnyAuthority(Role.CLIENTE.name(), Role.ADMIN.name())
@@ -77,11 +81,24 @@ public class SecurityConfig {
                                                 .hasAnyAuthority(Role.ADMIN.name())
                                                 .anyRequest()
                                                 .authenticated())
+                                // Sin sesión (o con un token vencido) → 401; con sesión pero sin permiso → 403.
+                                // Mismo formato { status, message } que el resto de los errores
+                                .exceptionHandling(errors -> errors
+                                                .authenticationEntryPoint((request, response, ex) -> writeError(response,
+                                                                HttpStatus.UNAUTHORIZED, "Tenés que iniciar sesión para hacer esto"))
+                                                .accessDeniedHandler((request, response, ex) -> writeError(response,
+                                                                HttpStatus.FORBIDDEN, "No tenés permiso para hacer esto")))
                                 .sessionManagement(session -> session.sessionCreationPolicy(STATELESS))
                                 .authenticationProvider(authenticationProvider)
                                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
                 return http.build();
+        }
+
+        private void writeError(HttpServletResponse response, HttpStatus status, String message) throws IOException {
+                response.setStatus(status.value());
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"status\":" + status.value() + ",\"message\":\"" + message + "\"}");
         }
 
         @Bean

@@ -1,12 +1,16 @@
 package com.uade.tpo.demo.service.impl;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Locale;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.uade.tpo.demo.dtos.response.NotificationResponseDTO;
+import com.uade.tpo.demo.entity.Booking;
+import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Notification;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -19,6 +23,8 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class NotificationServiceImpl implements NotificationService {
+    private static final DateTimeFormatter DAY = DateTimeFormatter.ofPattern("EEE d/M", Locale.forLanguageTag("es-AR"));
+
     private final NotificationRepository notificationRepository;
 
     @Override
@@ -54,6 +60,21 @@ public class NotificationServiceImpl implements NotificationService {
                 .message(message)
                 .createdAt(LocalDateTime.now())
                 .build());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Throwable.class)
+    public void bookingCancelled(Booking booking, String why) {
+        ExperienceSession session = booking.getExperienceSession();
+        String what = "\"" + session.getExperience().getTitle() + "\" del " + session.getStartsAt().format(DAY);
+        User buyer = booking.getOrder().getUser();
+        User recipient = booking.getRecipient();
+        create(buyer, "Reserva cancelada", "Se canceló tu reserva para " + what + " porque " + why
+                + ". Te devolvimos el dinero.");
+        if (recipient != null && !recipient.getId().equals(buyer.getId())) {
+            create(recipient, "Regalo cancelado", "Se canceló el regalo de " + what + " porque " + why
+                    + ". El dinero vuelve a quien te lo regaló.");
+        }
     }
 
     private NotificationResponseDTO toResponse(Notification notification) {

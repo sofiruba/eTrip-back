@@ -95,7 +95,7 @@ public class OrdersController {
     @PostMapping
     public ResponseEntity<OrderResponseDTO> createOrder(
             @RequestBody(required = false) OrderRequestDTO request,
-            @AuthenticationPrincipal User user) throws ResourceNotFoundException, BadRequestException {
+            @AuthenticationPrincipal User user) throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         OrderResponseDTO result = orderService.createOrder(user, request);
         return ResponseEntity.created(URI.create("/orders/" + result.getId())).body(result);
     }

@@ -2,9 +2,9 @@ package com.uade.tpo.demo.service;
 
 import com.uade.tpo.demo.dtos.request.CartItemRequestDTO;
 import com.uade.tpo.demo.dtos.response.CartResponseDTO;
-import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
+import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 
 public interface CartService {
     // Trae el carrito de un usuario (lo crea vacío si no tiene).

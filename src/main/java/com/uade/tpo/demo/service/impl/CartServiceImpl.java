@@ -1,30 +1,30 @@
 package com.uade.tpo.demo.service.impl;
 
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.uade.tpo.demo.entity.ExperienceSession;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import com.uade.tpo.demo.dtos.request.CartItemRequestDTO;
 import com.uade.tpo.demo.dtos.response.CartItemResponseDTO;
+import com.uade.tpo.demo.dtos.response.CartResponseDTO;
 import com.uade.tpo.demo.entity.Cart;
 import com.uade.tpo.demo.entity.CartItem;
+import com.uade.tpo.demo.entity.Experience;
+import com.uade.tpo.demo.entity.ExperienceSession;
 import com.uade.tpo.demo.entity.Role;
 import com.uade.tpo.demo.entity.User;
-import com.uade.tpo.demo.dtos.request.CartItemRequestDTO;
-import com.uade.tpo.demo.dtos.response.CartResponseDTO;
+import com.uade.tpo.demo.exceptions.BadRequestException;
+import com.uade.tpo.demo.exceptions.ForbiddenException;
 import com.uade.tpo.demo.exceptions.ResourceNotFoundException;
 import com.uade.tpo.demo.repository.CartItemRepository;
 import com.uade.tpo.demo.repository.CartRepository;
 import com.uade.tpo.demo.repository.ExperienceSessionRepository;
 import com.uade.tpo.demo.repository.UserRepository;
 import com.uade.tpo.demo.service.CartService;
-import com.uade.tpo.demo.exceptions.BadRequestException;
-import com.uade.tpo.demo.exceptions.ForbiddenException;
-import com.uade.tpo.demo.entity.Experience;
 
 import lombok.RequiredArgsConstructor;
 
@@ -105,32 +105,29 @@ public class CartServiceImpl implements CartService {
         User user = userRepository.findById(request.getUserId())
                 .orElseThrow(() -> new ResourceNotFoundException("El usuario no existe"));
 
-        // Los ADMIN son para moderación, no compran experiencias.
+        // Las cuentas de administrador moderan, no compran
         if (user.getRole() == Role.ADMIN) {
-            throw new ForbiddenException("Los administradores no pueden comprar experiencias");
+            throw new ForbiddenException("Las cuentas de administrador no pueden comprar experiencias");
         }
 
         ExperienceSession session = experienceSessionRepository
                 .findById(request.getExperienceSessionId())
-                .orElseThrow(() -> new ResourceNotFoundException("La sesión solicitada no existe"));
-
-        if (!session.isActive()
-                || session.getExperience() == null
-                || !session.getExperience().isActive()) {
-            throw new BadRequestException("La sesión seleccionada está inactiva y no se puede agregar al carrito");
-        }
-        if (session.getStartsAt() == null || session.getStartsAt().isBefore(java.time.LocalDateTime.now())) {
-            throw new BadRequestException("La sesión seleccionada ya comenzó o ya pasó");
-        }
-
-        // Un usuario no puede comprar (agregar al carrito) su propia experiencia.
+                .orElseThrow(() -> new ResourceNotFoundException("Esa fecha no existe"));
         Experience experience = session.getExperience();
-        if (experience != null && experience.getPublisher() != null
-                && experience.getPublisher().getId().equals(user.getId())) {
-            throw new ForbiddenException("No podes comprar tu propia experiencia");
+        if (!experience.isActive() || experience.getDeletedAt() != null || !experience.getPublisher().isActive()) {
+            throw new BadRequestException("Esta experiencia ya no está publicada");
+        }
+        if (!session.isActive()) {
+            throw new BadRequestException("Esta fecha se canceló. Elegí otra.");
+        }
+        if (session.getStartsAt().isBefore(LocalDateTime.now())) {
+            throw new BadRequestException("Esta fecha ya empezó. Elegí otra.");
+        }
+        if (experience.getPublisher().getId().equals(user.getId())) {
+            throw new BadRequestException("No podés comprar tu propia experiencia");
         }
 
-         // Valida que la cantidad solicitada sea positiva.
+        // Valida que la cantidad solicitada sea positiva.
         if (request.getQuantity() == null || request.getQuantity() <= 0) {
             throw new BadRequestException("La cantidad de personas tiene que ser al menos 1");
         }
@@ -208,7 +205,7 @@ public class CartServiceImpl implements CartService {
         ExperienceSession session = cartItem.getExperienceSession();
 
         if (!session.isActive()) {
-            throw new BadRequestException("La sesión seleccionada está inactiva y no se puede actualizar");
+            throw new BadRequestException("Esta fecha se canceló o ya empezó: no se puede cambiar");
         }
         if (session.getAvailableSeats() == null
                 || quantity > session.getAvailableSeats()) {

@@ -5,7 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** La compra es un regalo: para quién es (obligatorio), su email (opcional: si tiene cuenta, le avisamos) y una dedicatoria. */
+/** La compra es un regalo: para quién es (obligatorio), su email (opcional: se le avisa por mail y se le entrega cuando tenga una cuenta verificada con ese email) y una dedicatoria. */
 @Data
 @Builder
 @NoArgsConstructor

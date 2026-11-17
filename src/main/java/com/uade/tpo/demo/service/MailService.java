@@ -18,8 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 
 /**
  * Manda los mails de PLAN con Gmail (configurado en application.properties + .env).
- * Si no hay cuenta configurada (MAIL_USERNAME vacío), el código se escribe en la consola del back,
- * así el proyecto se puede levantar y probar sin la contraseña del mail.
+ * Si no hay cuenta configurada (MAIL_USERNAME vacío), el asunto del mail (que lleva el código) se escribe en la
+ * consola del back, así el proyecto se puede levantar y probar sin la contraseña del mail.
  * Si Gmail rechaza el envío, JavaMailSender tira una MailException (ver GlobalExceptionHandler).
  */
 @Slf4j
@@ -34,9 +34,6 @@ public class MailService {
 
     @Value("${spring.mail.username:}")
     private String from;
-
-    @Value("${app.front-url:http://localhost:5173}")
-    private String frontUrl;
 
     public void sendVerificationCode(User user, String code, int minutes) {
         send(user, "Tu código para verificar tu cuenta en PLAN: " + code,
@@ -83,8 +80,8 @@ public class MailService {
             text.append("\n\"").append(dedication).append("\"\n— ").append(buyer.getFirstName()).append("\n");
         }
         text.append("\n").append(delivered
-                ? "Ya está en tus reservas: entrá a " + frontUrl + "/mis-reservas con este email para ver el voucher."
-                : "Para recibirlo, creá tu cuenta en " + frontUrl + " con este email y verificalo (o entrá, si ya tenés una). "
+                ? "Ya está en tus reservas: entrá a PLAN con este email y vas a ver el voucher en \"Mis reservas\"."
+                : "Para recibirlo, creá tu cuenta en PLAN con este email y verificalo (o entrá, si ya tenés una). "
                         + "En ese momento el regalo pasa a ser tuyo y el voucher te aparece en \"Mis reservas\".")
                 .append("\n\n¡Que lo disfrutes!\nEl equipo de PLAN");
         send(toEmail, "🎁 " + buyer.getFirstName() + " te regaló una experiencia en PLAN", text.toString());

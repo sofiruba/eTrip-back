@@ -9,26 +9,25 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.JoinTable;
-import jakarta.persistence.ManyToMany;
-import jakarta.persistence.OrderBy;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToOne;
-import jakarta.persistence.OneToMany;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.JoinTable;
+import jakarta.persistence.Lob;
+import jakarta.persistence.ManyToMany;
+import jakarta.persistence.OrderBy;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-import lombok.ToString;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Data
 @EqualsAndHashCode(onlyExplicitlyIncluded = true)
@@ -47,16 +46,9 @@ public class User implements UserDetails {
     @Column(nullable = false, unique = true)
     private String email;
 
-    // Ojo con el nombre del campo: "username" chocaria con UserDetails.getUsername()
-    // (mas abajo, que debe devolver el email para que el login/JWT sigan andando).
-    // Lombok no genera el getter/setter de un campo si ya existe un metodo con ese
-    // nombre en la clase, asi que un campo llamado "username" quedaria SIN getter
-    // real (siempre te devolveria el email por la otra funcion). Por eso el campo
-    // java se llama displayUsername pero mapea a la misma columna "username"
-    // (unique = true; no nullable=false porque ya habia usuarios de prueba sin
-    // username antes de este cambio -- que sea obligatorio se valida en
-    // AuthenticationService.register()).
-    @Column(name = "username", unique = true)
+    // Nombre de usuario público. El campo no se llama "username" porque UserDetails.getUsername() tiene que
+    // devolver el email (con eso se inicia sesión y se arma el JWT): por eso se mapea a la columna "username".
+    @Column(name = "username", nullable = false, unique = true, length = 50)
     private String displayUsername;
 
     private String password;
@@ -85,15 +77,6 @@ public class User implements UserDetails {
     @OrderBy("name ASC")
     private Set<Interest> interests;
 
-    @OneToMany(mappedBy = "user")
-    private List<Order> orders;
-
-    @OneToMany(mappedBy = "publisher")
-    private List<Experience> experiences;
-
-    @OneToOne(mappedBy = "user")
-    private Cart cart;
-
     @Enumerated(EnumType.STRING)
     private Role role;
 
@@ -102,13 +85,9 @@ public class User implements UserDetails {
     private boolean active = true;
 
     // ¿Confirmó que el email es suyo (con el código que le mandamos al registrarse)? Sin eso no puede iniciar sesión.
-    // En Java arranca en false (cuenta nueva). El "default true" de la base es solo para las cuentas que ya existían
-    // cuando se agregó la columna: esas quedan verificadas y pueden seguir entrando.
-    @Column(nullable = false, columnDefinition = "boolean default true")
+    @Column(nullable = false)
     @Builder.Default
     private boolean emailVerified = false;
-
-    // Los códigos de verificación y de "Olvidé mi contraseña" viven en su propia tabla: ver VerificationCode.
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

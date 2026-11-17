@@ -131,7 +131,7 @@ public class InterestServiceImpl implements InterestService {
 
     private Interest findInterest(Long interestId) throws ResourceNotFoundException {
         return interestRepository.findById(interestId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe un interés con id " + interestId));
+                .orElseThrow(() -> new ResourceNotFoundException("El interés no existe"));
     }
 
     private ExperienceCategory findCategory(Long categoryId) throws ResourceNotFoundException, BadRequestException {
@@ -139,7 +139,7 @@ public class InterestServiceImpl implements InterestService {
             throw new BadRequestException("Elegí la categoría del interés");
         }
         return categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("No existe una categoria con id " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("La categoría no existe"));
     }
 
     private String requireName(String name) throws BadRequestException {
