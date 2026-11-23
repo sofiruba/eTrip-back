@@ -10,6 +10,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
+import com.uade.tpo.demo.dtos.response.EarningsEstimateDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
@@ -50,4 +51,9 @@ public interface ExperienceService {
     // Pausa o vuelve a publicar (baja lógica). Las reservas que ya existen siguen vigentes.
     ExperienceResponseDTO updateStatus(Long experienceId, boolean active, User currentUser)
             throws ResourceNotFoundException, ForbiddenException, BadRequestException;
+
+    // Calculadora de "Ser anfitrión": cuánto ganaría un anfitrión con la comisión real de PLAN.
+    // categoryId (opcional) suma el precio promedio de esa categoría como sugerencia.
+    EarningsEstimateDTO estimateEarnings(BigDecimal price, Integer guests, Integer sessionsPerMonth, Long categoryId)
+            throws ResourceNotFoundException, BadRequestException;
 }

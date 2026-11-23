@@ -17,6 +17,8 @@ public class ReviewResponseDTO {
     private String experienceTitle;
     private Long userId;
     private String userName;
+    // Foto de perfil del autor (en base64, igual que en UserResponseDTO); null si no subió ninguna
+    private String userAvatarBase64;
     private Integer rating;
     private String comment;
     private LocalDateTime createdAt;
@@ -24,4 +26,7 @@ public class ReviewResponseDTO {
     private String hostName;
     private String hostReply;
     private LocalDateTime hostReplyAt;
+    // Solo al crear o borrar: cómo quedó la experiencia (el front actualiza su promedio sin volver a pedirla)
+    private Double experienceAverageRating;
+    private Long experienceReviewCount;
 }

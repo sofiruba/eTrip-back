@@ -231,7 +231,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
     // Cancela una fecha (baja lógica): reembolsa sus reservas y queda en el historial.
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public void deleteSession(Long sessionId, User currentUser)
+    public ExperienceSessionResponseDTO cancelSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
         ExperienceSession session = experienceSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("La fecha no existe"));
@@ -267,7 +267,7 @@ public class ExperienceSessionServiceImpl implements ExperienceSessionService {
         // Los que esperaban un lugar también se enteran
         waitlistService.notifySessionCancelled(session);
         session.setActive(false);
-        experienceSessionRepository.save(session);
+        return mapToResponseDTO(experienceSessionRepository.save(session));
     }
 
     // Borra del todo una fecha que ya no sirve (cancelada o terminada) junto con sus ítems de carrito.

@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.uade.tpo.demo.dtos.request.ExperienceDiscountRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
+import com.uade.tpo.demo.dtos.response.EarningsEstimateDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
@@ -121,6 +122,17 @@ public class ExperiencesController {
             @RequestParam(required = false) List<Long> viewed,
             @AuthenticationPrincipal User currentUser) {
         return ResponseEntity.ok(experienceService.recommend(currentUser, viewed));
+    }
+
+    // Calculadora de la página "Ser anfitrión" (pública): cuánto le queda al anfitrión después de la comisión
+    // de PLAN y, si manda categoryId, el precio promedio de esa categoría como sugerencia.
+    @GetMapping("/earnings-estimate")
+    public ResponseEntity<EarningsEstimateDTO> estimateEarnings(
+            @RequestParam(required = false) BigDecimal price,
+            @RequestParam(required = false) Integer guests,
+            @RequestParam(required = false) Integer sessionsPerMonth,
+            @RequestParam(required = false) Long categoryId) throws ResourceNotFoundException, BadRequestException {
+        return ResponseEntity.ok(experienceService.estimateEarnings(price, guests, sessionsPerMonth, categoryId));
     }
 
     // Una experiencia puntual por id.

@@ -267,7 +267,7 @@
       "_type": "request",
       "parentId": "fld_users",
       "name": "Editar mi perfil",
-      "method": "PUT",
+      "method": "PATCH",
       "url": "{{ _.base_url }}/users/me",
       "metaSortKey": 14,
       "authentication": {
@@ -747,8 +747,8 @@
       "_type": "request",
       "parentId": "fld_ses",
       "name": "Cancelar fecha (reembolsa)",
-      "method": "DELETE",
-      "url": "{{ _.base_url }}/experience-sessions/1",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/experience-sessions/1/cancel",
       "metaSortKey": 47,
       "authentication": {
         "type": "bearer",
@@ -1025,8 +1025,8 @@
       "_type": "request",
       "parentId": "fld_buy",
       "name": "Regalo pendiente: me lo quedo",
-      "method": "DELETE",
-      "url": "{{ _.base_url }}/orders/1/gift",
+      "method": "PATCH",
+      "url": "{{ _.base_url }}/orders/1/gift/cancel",
       "metaSortKey": 65,
       "authentication": {
         "type": "bearer",

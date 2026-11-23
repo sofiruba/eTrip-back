@@ -8,6 +8,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -35,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.uade.tpo.demo.dtos.request.ExperienceRequestDTO;
 import com.uade.tpo.demo.dtos.request.ExperienceSearchDTO;
+import com.uade.tpo.demo.dtos.response.EarningsEstimateDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceDeleteResultDTO;
 import com.uade.tpo.demo.dtos.response.ExperienceResponseDTO;
 import com.uade.tpo.demo.dtos.response.RecommendationResponseDTO;
@@ -711,5 +713,47 @@ public class ExperienceServiceImpl implements ExperienceService {
         String last = publisher.getLastName() != null ? publisher.getLastName() : "";
         String fullName = (first + " " + last).trim();
         return fullName.isEmpty() ? publisher.getEmail() : fullName;
+    }
+
+    // Calculadora de "Ser anfitrión": usa la misma comisión que se cobra en cada venta (OrderServiceImpl)
+    @Override
+    @Transactional(readOnly = true)
+    public EarningsEstimateDTO estimateEarnings(BigDecimal price, Integer guests, Integer sessionsPerMonth, Long categoryId)
+            throws ResourceNotFoundException, BadRequestException {
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BadRequestException("Ingresá un precio por persona mayor a 0");
+        }
+        if (guests == null || guests < 1 || guests > 100) {
+            throw new BadRequestException("La cantidad de huéspedes por fecha tiene que ser de 1 a 100");
+        }
+        if (sessionsPerMonth == null || sessionsPerMonth < 1 || sessionsPerMonth > 60) {
+            throw new BadRequestException("Las fechas por mes tienen que ser de 1 a 60");
+        }
+
+        BigDecimal gross = price.multiply(BigDecimal.valueOf(guests)).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal commission = OrderServiceImpl.commissionOf(gross);
+        BigDecimal net = gross.subtract(commission);
+        BigDecimal netPerMonth = net.multiply(BigDecimal.valueOf(sessionsPerMonth));
+
+        EarningsEstimateDTO.EarningsEstimateDTOBuilder estimate = EarningsEstimateDTO.builder()
+                .grossPerSession(gross)
+                .commissionRate(OrderServiceImpl.PLAN_COMMISSION_RATE.multiply(BigDecimal.valueOf(100))
+                        .setScale(0, RoundingMode.HALF_UP))
+                .commissionPerSession(commission)
+                .netPerSession(net)
+                .netPerMonth(netPerMonth)
+                .netPerYear(netPerMonth.multiply(BigDecimal.valueOf(12)))
+                .refundDeadlineHours(BookingServiceImpl.REFUND_DEADLINE_HOURS);
+
+        // Precio sugerido: el promedio de lo que ya está publicado en esa categoría
+        if (categoryId != null) {
+            ExperienceCategory category = experienceCategoryRepository.findById(categoryId)
+                    .orElseThrow(() -> new ResourceNotFoundException("La categoría no existe"));
+            Double average = experienceRepository.averagePriceByCategoryId(categoryId);
+            estimate.categoryName(category.getName())
+                    .categoryExperienceCount(experienceRepository.countByCategoryIdAndActiveTrueAndDeletedAtIsNull(categoryId))
+                    .suggestedPrice(average != null ? BigDecimal.valueOf(average).setScale(0, RoundingMode.HALF_UP) : null);
+        }
+        return estimate.build();
     }
 }

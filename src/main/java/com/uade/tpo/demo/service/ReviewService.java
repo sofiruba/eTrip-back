@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
+import com.uade.tpo.demo.dtos.response.ReviewStatsDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -17,7 +18,12 @@ public interface ReviewService {
 
     // Reseñas de una experiencia puntual; a propósito públicas (prueba social del catálogo,
     // igual que el rating promedio), no solo visibles para el autor.
-    Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, Pageable pageable) throws ResourceNotFoundException;
+    // text (opcional): solo las que mencionan ese texto.
+    Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, String text, Pageable pageable)
+            throws ResourceNotFoundException;
+
+    // Promedio, cantidad y distribución por puntaje de todas las reseñas de una experiencia.
+    ReviewStatsDTO getReviewStats(Long experienceId) throws ResourceNotFoundException;
 
     // Mis reseñas.
     Page<ReviewResponseDTO> getMyReviews(User currentUser, Pageable pageable);
@@ -30,8 +36,8 @@ public interface ReviewService {
     ReviewResponseDTO createReview(ReviewRequestDTO request, User currentUser)
             throws ResourceNotFoundException, BadRequestException;
 
-    // Borra una reseña; solo el autor o un ADMIN.
-    void deleteReview(Long reviewId, User currentUser)
+    // Borra una reseña; solo el autor o un ADMIN. Devuelve la reseña borrada (con el promedio nuevo de la experiencia).
+    ReviewResponseDTO deleteReview(Long reviewId, User currentUser)
             throws ResourceNotFoundException, ForbiddenException;
 
     // Responde (o edita/borra la respuesta de) una reseña; solo el anfitrión de la experiencia o un ADMIN.

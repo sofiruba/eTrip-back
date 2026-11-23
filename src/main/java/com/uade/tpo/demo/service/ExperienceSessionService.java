@@ -37,8 +37,8 @@ public interface ExperienceSessionService {
     ExperienceSessionResponseDTO updateSession(Long sessionId, ExperienceSessionRequestDTO request, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
-    // Da de baja lógicamente una fecha. Solo el dueño (publisher) de la experiencia o un ADMIN.
-    void deleteSession(Long sessionId, User currentUser)
+    // Cancela una fecha (baja lógica, PATCH) y devuelve cómo quedó. Solo el dueño (publisher) de la experiencia o un ADMIN.
+    ExperienceSessionResponseDTO cancelSession(Long sessionId, User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException;
 
     // Borra del todo una fecha cancelada o ya terminada (con sus reservas e ítems de carrito).

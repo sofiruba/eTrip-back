@@ -2,7 +2,10 @@ package com.uade.tpo.demo.service.impl;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
+import com.uade.tpo.demo.dtos.response.ReviewStatsDTO;
 import com.uade.tpo.demo.entity.Booking;
 import com.uade.tpo.demo.entity.Experience;
 import com.uade.tpo.demo.entity.Review;
@@ -50,13 +54,44 @@ public class ReviewServiceImpl implements ReviewService {
     // Reseñas de una experiencia puntual; siempre públicas.
     @Override
     @Transactional(readOnly = true)
-    public Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, Pageable pageable)
+    public Page<ReviewResponseDTO> getReviewsByExperience(Long experienceId, String text, Pageable pageable)
             throws ResourceNotFoundException {
+        assertExperienceExists(experienceId);
+
+        String search = trimToNull(text);
+        Page<Review> page = search == null
+                ? reviewRepository.findByExperienceId(experienceId, pageable)
+                : reviewRepository.findByExperienceIdAndCommentContainingIgnoreCase(experienceId, search, pageable);
+        return page.map(this::toResponse);
+    }
+
+    // Promedio, cantidad y distribución por puntaje (de 5 a 1, con 0 en los que no tienen reseñas).
+    @Override
+    @Transactional(readOnly = true)
+    public ReviewStatsDTO getReviewStats(Long experienceId) throws ResourceNotFoundException {
+        assertExperienceExists(experienceId);
+
+        Map<Integer, Long> distribution = new LinkedHashMap<>();
+        for (int stars = 5; stars >= 1; stars--) {
+            distribution.put(stars, 0L);
+        }
+        for (Object[] row : reviewRepository.countByRating(experienceId)) {
+            distribution.put(((Number) row[0]).intValue(), ((Number) row[1]).longValue());
+        }
+        Double average = reviewRepository.averageRatingByExperienceId(experienceId);
+
+        return ReviewStatsDTO.builder()
+                .experienceId(experienceId)
+                .count(reviewRepository.countByExperienceId(experienceId))
+                .average(average != null ? average : 0)
+                .distribution(distribution)
+                .build();
+    }
+
+    private void assertExperienceExists(Long experienceId) throws ResourceNotFoundException {
         if (!experienceRepository.existsById(experienceId)) {
             throw new ResourceNotFoundException("La experiencia no existe");
         }
-
-        return reviewRepository.findByExperienceId(experienceId, pageable).map(this::toResponse);
     }
 
     // Mis reseñas.
@@ -123,13 +158,13 @@ public class ReviewServiceImpl implements ReviewService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        return toResponse(reviewRepository.save(review));
+        return withExperienceStats(toResponse(reviewRepository.save(review)));
     }
 
-    // Borra una reseña; solo el autor o un ADMIN.
+    // Borra una reseña; solo el autor o un ADMIN. Devuelve la reseña borrada con el promedio nuevo de la experiencia.
     @Override
     @Transactional(rollbackFor = Throwable.class)
-    public void deleteReview(Long reviewId, User currentUser)
+    public ReviewResponseDTO deleteReview(Long reviewId, User currentUser)
             throws ResourceNotFoundException, ForbiddenException {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("La reseña no existe"));
@@ -142,7 +177,20 @@ public class ReviewServiceImpl implements ReviewService {
             throw new ForbiddenException("Solo el autor o un administrador pueden borrar esta reseña");
         }
 
+        ReviewResponseDTO deleted = toResponse(review);
         reviewRepository.delete(review);
+        reviewRepository.flush();
+        return withExperienceStats(deleted);
+    }
+
+    // Suma a la respuesta cómo quedó la experiencia (cantidad de reseñas y promedio), así el front no la vuelve a pedir
+    private ReviewResponseDTO withExperienceStats(ReviewResponseDTO review) {
+        Long experienceId = review.getExperienceId();
+        if (experienceId != null) {
+            review.setExperienceReviewCount(reviewRepository.countByExperienceId(experienceId));
+            review.setExperienceAverageRating(reviewRepository.averageRatingByExperienceId(experienceId));
+        }
+        return review;
     }
 
     // Responde una reseña: solo el anfitrión (publisher) de la experiencia o un ADMIN. Vacío = borrar respuesta.
@@ -217,6 +265,9 @@ public class ReviewServiceImpl implements ReviewService {
                 .experienceTitle(experience != null ? experience.getTitle() : null)
                 .userId(user != null ? user.getId() : null)
                 .userName(userName(user))
+                .userAvatarBase64(user != null && user.getAvatar() != null
+                        ? Base64.getEncoder().encodeToString(user.getAvatar())
+                        : null)
                 .rating(review.getRating())
                 .comment(review.getComment())
                 .createdAt(review.getCreatedAt())

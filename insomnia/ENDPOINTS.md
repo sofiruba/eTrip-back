@@ -42,7 +42,7 @@ nuevo, y su nombre de usuario se libera cuando su código vence. Los códigos ve
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
 | GET | `/users/me` | logueado | Mi perfil con contadores (`bookingsCount`, `reviewsCount`, `publishedExperiences`) |
-| PUT | `/users/me` | logueado | `{ firstName?, lastName?, bio?, city?, avatarBase64?, interests? }`: solo lo que cambia; en bio, ciudad y foto `""` lo borra |
+| PATCH | `/users/me` | logueado | `{ firstName?, lastName?, bio?, city?, avatarBase64?, interests? }`: solo lo que cambia; en bio, ciudad y foto `""` lo borra |
 | GET | `/users/{id}` | público | Perfil público (sin email ni datos privados) |
 | GET | `/users` | ADMIN | Todos los usuarios |
 | PATCH | `/users/{id}/role?role=ADMIN\|CLIENTE` | ADMIN | No se puede cambiar el propio |
@@ -71,6 +71,7 @@ GET (público): `[{ code, name, symbol, arsPerUnit, updatedAt }]`, primero los p
 | GET | `/experiences` | público | Catálogo con filtros: `title`, `location`, `categoryId`, `minPrice`/`maxPrice` (precio final), `onlyDiscounted`, `dateFrom`/`dateTo`, `guests`, `onlyAvailable`, `durationMin`/`durationMax`, `timeSlots=manana,tarde,noche`, `withKids`, `tags=Vinos,Café`. Los listados mandan solo la foto de portada |
 | GET | `/experiences/{id}` | público | Detalle con todas las fotos |
 | GET | `/experiences/mine` | logueado | Las mías (también pausadas) |
+| GET | `/experiences/earnings-estimate?price=&guests=&sessionsPerMonth=&categoryId=` | público | Calculadora de "Ser anfitrión": bruto, comisión de PLAN, neto por fecha, mes y año, y precio promedio de la categoría (`suggestedPrice`). 400 si un valor está fuera de rango |
 | GET | `/experiences/recommended?viewed=12,5` | logueado | "Para vos": hasta 8 `{ experience, reason }`. Puntúa con mis intereses (x3), lo que guardé o reservé (x2) y lo que vi (x1); sin las mías, guardadas ni reservadas |
 | POST | `/experiences` | logueado | `multipart/form-data`: parte `experience` (JSON: `title, description, price, location, categoryId, adultsOnly, tags`) + 1 a 5 `images` (≤ 5 MB) |
 | PUT | `/experiences/{id}` | dueño o ADMIN | Igual que POST; sin `images`, las fotos quedan como estaban |
@@ -90,7 +91,7 @@ GET (público): `[{ code, name, symbol, arsPerUnit, updatedAt }]`, primero los p
 | GET | `/experience-sessions/manage/summary` | logueado | "Fechas y huéspedes": una fila por experiencia mía con fechas por estado, próxima fecha, lugares reservados, ocupación y lista de espera |
 | POST | `/experience-sessions` | dueño o ADMIN | `{ experienceId, startsAt, endsAt, capacity }` (fecha futura, sin superponerse) |
 | PUT | `/experience-sessions/{id}` | dueño o ADMIN | Con reservas no se cambia el horario ni se baja el cupo por debajo de lo vendido |
-| DELETE | `/experience-sessions/{id}` | dueño o ADMIN | Cancelar (baja lógica): reembolsa y avisa a todos |
+| PATCH | `/experience-sessions/{id}/cancel` | dueño o ADMIN | Cancelar (baja lógica): reembolsa, avisa a todos y devuelve la fecha con `status: CANCELLED` |
 | DELETE | `/experience-sessions/{id}/permanent` | dueño o ADMIN | Borrar una fecha cancelada o terminada que nunca tuvo reservas |
 | GET | `/experience-sessions/waitlist/mine` | logueado | Ids de las fechas agotadas en las que estoy anotado |
 | POST / DELETE | `/experience-sessions/{id}/waitlist` | logueado | Anotarme / bajarme de la lista de espera (solo fechas agotadas) |
@@ -121,7 +122,7 @@ GET (público): `[{ code, name, symbol, arsPerUnit, updatedAt }]`, primero los p
 | GET | `/orders/stats` | ADMIN | Ventas, reembolsos, ventas netas, comisión de PLAN y `commissionRate` |
 | POST | `/orders/{id}/cancel` | ADMIN | Reembolsa todas sus reservas que todavía no empezaron |
 | PATCH | `/orders/{id}/gift` | quien pagó | Regalo pendiente: `{ recipientEmail }` corrige el email y reenvía el aviso (si es de una cuenta verificada, se entrega ya) |
-| DELETE | `/orders/{id}/gift` | quien pagó | Regalo pendiente: me lo quedo (deja de ser un regalo) |
+| PATCH | `/orders/{id}/gift/cancel` | quien pagó | Regalo pendiente: me lo quedo (deja de ser un regalo); devuelve la orden |
 
 ```json
 {
@@ -157,11 +158,12 @@ Cada reserva trae, para quien la mira: `paidAmount`, `hostEarnings` (precio de l
 ### Reseñas — `/reviews`
 | Método | Ruta | Permiso | Descripción |
 |---|---|---|---|
-| GET | `/reviews/experience/{id}` | público | Reseñas de una experiencia (404 si la experiencia no existe; `[]` si no tiene) |
+| GET | `/reviews/experience/{id}?page=0&size=4&sort=recent&q=` | público | Reseñas de una experiencia, paginadas (`Page` de Spring). `sort`: `recent` (default), `best`, `worst`; `q` busca en el texto. 404 si la experiencia no existe; `content: []` si no tiene. Cada reseña trae `userAvatarBase64` (foto del autor) |
+| GET | `/reviews/experience/{id}/stats` | público | `{ count, average, distribution: { 5: n, …, 1: n } }` sobre todas las reseñas |
 | GET | `/reviews/mine`, `/reviews` | logueado | Las mías (ADMIN: todas en `/reviews`) |
 | POST | `/reviews` | quien fue | `{ experienceId, rating (1-5), comment }`. Una por experiencia, cuando ya terminó |
 | PUT | `/reviews/{id}/reply` | anfitrión | `{ reply }`; vacío borra la respuesta |
-| DELETE | `/reviews/{id}` | autor o ADMIN | |
+| DELETE | `/reviews/{id}` | autor o ADMIN | 200 con la reseña borrada y cómo quedó la experiencia (`experienceAverageRating`, `experienceReviewCount`) |
 
 ### Guardados — `/favorites`
 GET (ids que guardé) · POST `/favorites/{experienceId}` · DELETE `/favorites/{experienceId}`. No se puede guardar

@@ -7,7 +7,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -36,8 +35,8 @@ public class UsersController {
         return ResponseEntity.ok(userService.getMyProfile(currentUser));
     }
 
-    // Edita mis propios datos de perfil.
-    @PutMapping("/me")
+    // Edita mis propios datos de perfil: PATCH porque se mandan solo los campos que cambian (la foto, los intereses…).
+    @PatchMapping("/me")
     public ResponseEntity<UserResponseDTO> updateMyProfile(
             @RequestBody UserUpdateDTO request,
             @AuthenticationPrincipal User currentUser) throws BadRequestException {

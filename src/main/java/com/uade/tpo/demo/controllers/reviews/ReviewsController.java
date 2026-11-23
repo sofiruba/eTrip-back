@@ -4,6 +4,7 @@ import java.net.URI;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.uade.tpo.demo.dtos.request.ReviewReplyRequestDTO;
 import com.uade.tpo.demo.dtos.request.ReviewRequestDTO;
 import com.uade.tpo.demo.dtos.response.ReviewResponseDTO;
+import com.uade.tpo.demo.dtos.response.ReviewStatsDTO;
 import com.uade.tpo.demo.entity.User;
 import com.uade.tpo.demo.exceptions.BadRequestException;
 import com.uade.tpo.demo.exceptions.ForbiddenException;
@@ -49,16 +51,38 @@ public class ReviewsController {
     }
 
     // Reseñas de una experiencia puntual; siempre públicas (prueba social para cualquiera).
+    // Paginadas: ?page=0&size=4. sort = recent (default) | best | worst; q = buscar en el texto.
     @GetMapping("/experience/{experienceId}")
     public ResponseEntity<Page<ReviewResponseDTO>> getReviewsByExperience(
             @PathVariable Long experienceId,
             @RequestParam(required = false) Integer page,
-            @RequestParam(required = false) Integer size) throws ResourceNotFoundException {
+            @RequestParam(required = false) Integer size,
+            @RequestParam(required = false) String sort,
+            @RequestParam(required = false) String q) throws ResourceNotFoundException {
         PageRequest pageRequest = page == null || size == null
-                ? PageRequest.of(0, Integer.MAX_VALUE)
-                : PageRequest.of(page, size);
+                ? PageRequest.of(0, Integer.MAX_VALUE, reviewSort(sort))
+                : PageRequest.of(page, size, reviewSort(sort));
 
-        return ResponseEntity.ok(reviewService.getReviewsByExperience(experienceId, pageRequest));
+        return ResponseEntity.ok(reviewService.getReviewsByExperience(experienceId, q, pageRequest));
+    }
+
+    // Promedio, cantidad y cuántas reseñas hay de cada puntaje (sobre todas, no sobre una página).
+    @GetMapping("/experience/{experienceId}/stats")
+    public ResponseEntity<ReviewStatsDTO> getReviewStats(@PathVariable Long experienceId)
+            throws ResourceNotFoundException {
+        return ResponseEntity.ok(reviewService.getReviewStats(experienceId));
+    }
+
+    // Orden de las reseñas; a igual puntaje, primero las más nuevas
+    private Sort reviewSort(String sort) {
+        Sort newest = Sort.by(Sort.Direction.DESC, "createdAt");
+        if ("best".equals(sort)) {
+            return Sort.by(Sort.Direction.DESC, "rating").and(newest);
+        }
+        if ("worst".equals(sort)) {
+            return Sort.by(Sort.Direction.ASC, "rating").and(newest);
+        }
+        return newest;
     }
 
     // Mis reseñas.
@@ -101,12 +125,11 @@ public class ReviewsController {
         return ResponseEntity.ok(reviewService.replyToReview(reviewId, request, currentUser));
     }
 
-    // Borra una reseña; solo el autor o un ADMIN.
+    // Borra una reseña; solo el autor o un ADMIN. 200 con la reseña borrada y el promedio nuevo de la experiencia.
     @DeleteMapping("/{reviewId}")
-    public ResponseEntity<Void> deleteReview(
+    public ResponseEntity<ReviewResponseDTO> deleteReview(
             @PathVariable Long reviewId,
             @AuthenticationPrincipal User currentUser) throws ResourceNotFoundException, ForbiddenException {
-        reviewService.deleteReview(reviewId, currentUser);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(reviewService.deleteReview(reviewId, currentUser));
     }
 }

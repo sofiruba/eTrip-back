@@ -6,7 +6,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -73,8 +72,8 @@ public class OrdersController {
         return ResponseEntity.ok(orderService.updateGiftEmail(orderId, request.getRecipientEmail(), user));
     }
 
-    // Regalo pendiente: quien pagó se lo queda (pasa a ser una compra común).
-    @DeleteMapping("/{orderId}/gift")
+    // Regalo pendiente: quien pagó se lo queda (pasa a ser una compra común). Modifica la orden (no borra nada): PATCH.
+    @PatchMapping("/{orderId}/gift/cancel")
     public ResponseEntity<OrderResponseDTO> cancelGift(
             @PathVariable Long orderId,
             @AuthenticationPrincipal User user)

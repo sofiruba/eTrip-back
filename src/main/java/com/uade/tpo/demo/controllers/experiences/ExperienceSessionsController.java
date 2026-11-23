@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -127,14 +128,14 @@ public class ExperienceSessionsController {
         return ResponseEntity.ok(experienceSessionService.updateSession(sessionId, request, currentUser));
     }
 
-    // Cancela una fecha futuro (baja lógica) y reembolsa sus reservas. Solo el dueño de la experiencia o un ADMIN.
-    @DeleteMapping("/{sessionId}")
-    public ResponseEntity<Void> deleteSession(
+    // Cancela una fecha futura y reembolsa sus reservas. Es una baja lógica (la fecha queda como CANCELLED en el
+    // historial), por eso es PATCH y devuelve la fecha actualizada. Solo el dueño de la experiencia o un ADMIN.
+    @PatchMapping("/{sessionId}/cancel")
+    public ResponseEntity<ExperienceSessionResponseDTO> cancelSession(
             @PathVariable Long sessionId,
             @AuthenticationPrincipal User currentUser)
             throws ResourceNotFoundException, BadRequestException, ForbiddenException {
-        experienceSessionService.deleteSession(sessionId, currentUser);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok(experienceSessionService.cancelSession(sessionId, currentUser));
     }
 
     // Borra del todo una fecha cancelada o terminada (la saca del calendario).
